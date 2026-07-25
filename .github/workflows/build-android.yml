@@ -45,9 +45,14 @@ jobs:
       - name: TWA projesini oluştur (init)
         timeout-minutes: 8
         run: |
-          yes "" | bubblewrap init \
+          echo "JAVA_HOME=$JAVA_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          yes "n" | bubblewrap init \
             --manifest="https://nuhkozan.github.io/mindgap/manifest.json" \
             --directory="./twa-project" \
+            --jdkPath="$JAVA_HOME" \
+            --androidSdkPath="$ANDROID_HOME" \
             2>&1 | tee init.log
           echo "---- init tamamlandı ----"
 
@@ -72,7 +77,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          yes "" | bubblewrap build \
+          yes "n" | bubblewrap build \
             --skipPwaValidation \
             2>&1 | tee ../build.log
 
