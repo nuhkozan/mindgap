@@ -33,12 +33,10 @@ VERSION_CODE="1"
 ICON_URL="https://nuhkozan.github.io/mindgap/icons/icon-512.png"
 
 # ── AdMob ──
-# ⚠️ Şu an TEST ID'leri kullanılıyor (Google'ın resmi test reklam birimleri).
-# İlk build ve test başarılı olduktan sonra bunları gerçek ID'lerinle değiştir:
-#   ADMOB_APP_ID              -> ca-app-pub-5226177276862447~4336706536
-#   ADMOB_REWARDED_AD_UNIT_ID -> ca-app-pub-5226177276862447/2037846257
-ADMOB_APP_ID="ca-app-pub-3940256099942544~3347511713"
-ADMOB_REWARDED_AD_UNIT_ID="ca-app-pub-3940256099942544/5224354917"
+# ✅ Test build başarıyla doğrulandı (gerçek test reklamı tam ekran gösterildi).
+# Artık gerçek (production) ID'ler kullanılıyor.
+ADMOB_APP_ID="ca-app-pub-5226177276862447~4336706536"
+ADMOB_REWARDED_AD_UNIT_ID="ca-app-pub-5226177276862447/2037846257"
 
 PROJ="android-project"
 rm -rf "$PROJ"
@@ -125,6 +123,7 @@ android {
 
 dependencies {
     implementation 'com.google.android.gms:play-services-ads:25.4.0'
+    implementation 'com.google.android.ump:user-messaging-platform:4.0.0'
 }
 EOF
 
@@ -202,8 +201,9 @@ echo "==> İkon indiriliyor: $ICON_URL"
 curl -fsSL "$ICON_URL" -o "$PROJ/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
 
 # ---------- MainActivity.java ----------
-# WebView + AdMob ödüllü reklam köprüsü. index.html içindeki
-# "window.AndroidBridge.showRewardedAd()" çağrısını burada karşılıyoruz.
+# WebView + AdMob ödüllü reklam köprüsü + UMP (GDPR/rıza) akışı.
+# index.html içindeki "window.AndroidBridge.showRewardedAd()" ve
+# "window.AndroidBridge.showPrivacyOptionsForm()" çağrılarını burada karşılıyoruz.
 cat > "$PROJ/app/src/main/java/com/mindgap/app/MainActivity.java" << 'JAVAEOF'
 package com.mindgap.app;
 
@@ -222,11 +222,13 @@ import com.google.android.gms.ads.FullScreenContentCallback;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.MobileAds;
 import com.google.android.gms.ads.OnUserEarnedRewardListener;
-import com.google.android.gms.ads.initialization.InitializationStatus;
-import com.google.android.gms.ads.initialization.OnInitializationCompleteListener;
 import com.google.android.gms.ads.rewarded.RewardItem;
 import com.google.android.gms.ads.rewarded.RewardedAd;
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
+
+import com.google.android.ump.ConsentInformation;
+import com.google.android.ump.ConsentRequestParameters;
+import com.google.android.ump.UserMessagingPlatform;
 
 /**
  * MIND GAP — WebView tabanlı native kabuk.
@@ -238,24 +240,26 @@ import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
  * köprüsüne ihtiyaç var. Bu geçişin bir yan faydası: WebView zaten
  * hiçbir zaman adres çubuğu göstermez, yani assetlinks.json / Digital
  * Asset Links doğrulamasına artık ihtiyaç yok.
+ *
+ * UMP (User Messaging Platform) akışı:
+ * AdMob'u başlatmadan/reklam yüklemeden önce Google'ın UMP SDK'sı ile
+ * kullanıcının rıza durumu kontrol edilir (AB/İngiltere/İsviçre gibi
+ * bölgelerde GDPR gereği zorunlu). Rıza gerekiyorsa form otomatik
+ * gösterilir; ancak rıza alındıktan/gerekmediği anlaşıldıktan SONRA
+ * MobileAds.initialize() çağrılır ve reklam yüklenir.
  */
 public class MainActivity extends Activity {
 
     private WebView webView;
     private RewardedAd rewardedAd;
     private boolean adIsLoading = false;
+    private boolean isMobileAdsInitialized = false;
+    private ConsentInformation consentInformation;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        MobileAds.initialize(this, new OnInitializationCompleteListener() {
-            @Override
-            public void onInitializationComplete(InitializationStatus initializationStatus) {
-                loadRewardedAd();
-            }
-        });
 
         webView = new WebView(this);
         setContentView(webView);
@@ -272,6 +276,44 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
         webView.loadUrl(getString(R.string.launch_url));
+
+        requestConsentAndInitAds();
+    }
+
+    /** Her açılışta çağrılır: rıza durumunu günceller, gerekiyorsa formu gösterir. */
+    private void requestConsentAndInitAds() {
+        consentInformation = UserMessagingPlatform.getConsentInformation(this);
+        ConsentRequestParameters params = new ConsentRequestParameters.Builder().build();
+
+        consentInformation.requestConsentInfoUpdate(
+                this,
+                params,
+                () -> UserMessagingPlatform.loadAndShowConsentFormIfRequired(
+                        MainActivity.this,
+                        formError -> {
+                            if (consentInformation.canRequestAds()) {
+                                initializeMobileAdsSdk();
+                            }
+                        }),
+                requestConsentError -> {
+                    // Rıza bilgisi güncellenemedi (ör. bağlantı yok) — daha önce
+                    // rıza verilmişse yine de reklam gösterilebilir, aşağıdaki
+                    // kontrol bunu zaten yapıyor.
+                });
+
+        // Önceki oturumdan geçerli bir rıza zaten varsa (ikinci ve sonraki
+        // açılışlarda genelde böyle), yukarıdaki asenkron güncellemeyi
+        // beklemeden hemen reklamları başlat.
+        if (consentInformation.canRequestAds()) {
+            initializeMobileAdsSdk();
+        }
+    }
+
+    private void initializeMobileAdsSdk() {
+        if (isMobileAdsInitialized) return;
+        isMobileAdsInitialized = true;
+        MobileAds.initialize(this, initializationStatus -> { });
+        loadRewardedAd();
     }
 
     private void loadRewardedAd() {
@@ -312,6 +354,11 @@ public class MainActivity extends Activity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
+                    if (!isMobileAdsInitialized) {
+                        // Rıza henüz alınmadı/tamamlanmadı — reklam sistemi hazır değil.
+                        evalJs("window.onRewardedAdNotReady && window.onRewardedAdNotReady()");
+                        return;
+                    }
                     if (rewardedAd == null) {
                         evalJs("window.onRewardedAdNotReady && window.onRewardedAdNotReady()");
                         loadRewardedAd();
@@ -345,7 +392,28 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public boolean isRewardedAdReady() {
-            return rewardedAd != null;
+            return isMobileAdsInitialized && rewardedAd != null;
+        }
+
+        /** Kullanıcı daha sonra GDPR rıza tercihini değiştirmek isterse çağrılır. */
+        @JavascriptInterface
+        public void showPrivacyOptionsForm() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    UserMessagingPlatform.showPrivacyOptionsForm(
+                            MainActivity.this,
+                            formError -> { /* form kapandı, ekstra işlem gerekmiyor */ });
+                }
+            });
+        }
+
+        /** Ayarlar menüsünde "Gizlilik Tercihleri" butonunun gösterilip gösterilmeyeceği. */
+        @JavascriptInterface
+        public boolean isPrivacyOptionsRequired() {
+            return consentInformation != null &&
+                    consentInformation.getPrivacyOptionsRequirementStatus()
+                            == ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED;
         }
     }
 
