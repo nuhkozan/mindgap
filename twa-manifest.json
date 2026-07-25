@@ -1,0 +1,40 @@
+{
+  "packageId": "com.mindgap.app",
+  "host": "nuhkozan.github.io",
+  "name": "MIND GAP",
+  "launcherName": "MIND GAP",
+  "display": "standalone",
+  "themeColor": "#060A10",
+  "navigationColor": "#060A10",
+  "backgroundColor": "#060A10",
+  "enableNotifications": false,
+  "startUrl": "/mindgap/index.html",
+  "iconUrl": "https://nuhkozan.github.io/mindgap/icons/icon-512.png",
+  "maskableIconUrl": "https://nuhkozan.github.io/mindgap/icons/icon-512-maskable.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "mindgap"
+  },
+  "appVersion": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://nuhkozan.github.io/mindgap/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://nuhkozan.github.io/mindgap/",
+  "minSdkVersion": 21,
+  "orientation": "portrait",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "shareTarget": null
+}
