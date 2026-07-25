@@ -42,6 +42,13 @@ jobs:
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
 
+      - name: JDK/SDK yollarını doğrula (erken hata tespiti)
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          if [ -z "$JAVA_HOME" ]; then echo "!!! JAVA_HOME boş !!!"; exit 1; fi
+          if [ -z "$ANDROID_HOME" ]; then echo "!!! ANDROID_HOME boş !!!"; exit 1; fi
+
       # ── PTY üzerinden bubblewrap init ──
       # Gerçek bir pseudo-terminal simüle ederek Bubblewrap'in interaktif
       # sorularını çıktıyı canlı izleyip doğru cevaplarla geçiyoruz.
@@ -49,9 +56,6 @@ jobs:
       # yaşadığımız tutarsız/sonsuz-döngü sorunlarını çözüyor.
       - name: TWA projesini oluştur (init, PTY ile)
         timeout-minutes: 10
-        env:
-          JAVA_HOME: ${{ env.JAVA_HOME }}
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
         run: |
           node .github/scripts/run-bubblewrap.js \
             "bubblewrap init --manifest=\"https://nuhkozan.github.io/mindgap/manifest.json\" --directory=\"./twa-project\"" \
