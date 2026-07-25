@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mindgap-v1';
+const CACHE_NAME = 'mindgap-v2'; // ⚠️ Her yeni index.html güncellemesinde bu numarayı artır (v3, v4...)
 const ASSETS = [
   './index.html',
   './manifest.json',
@@ -23,9 +23,29 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Cache-first strateji: önce cache'e bak, yoksa ağdan çek ve cache'e ekle.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  const isHTML = event.request.mode === 'navigate' ||
+    (event.request.headers.get('accept') || '').includes('text/html');
+
+  if (isHTML) {
+    // Network-first: HTML için önce ağdan güncel sürümü çek, sadece
+    // gerçekten offline olunduğunda cache'e düş. Bu sayede yeni bir
+    // index.html yayınladığında kullanıcı eski önbellekte takılı kalmaz.
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          const resClone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, resClone));
+          return res;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Statik dosyalar (ikonlar, manifest) için cache-first — hız ve offline erişim için yeterli.
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
