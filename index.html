@@ -1907,6 +1907,11 @@ async function sList(prefix,shared){
   return out;
 }
 
+function escHtml(s){
+  return String(s).replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
 function normName(n){return n.trim().replace(/\s+/g,' ');}
 function nameKey(n){return n.toLocaleLowerCase('tr').replace(/[^a-z0-9çğıöşü]/g,'_');}
 
@@ -1993,6 +1998,9 @@ async function askUsername(){
       err.classList.remove('offlineErr');
       if(name.length<3){err.textContent=T('nameTooShort');return;}
       if(name.length>16){err.textContent=T('nameTooLong');return;}
+      // Sadece harf/rakam/boşluk — görünmez/kontrol karakterleri ve emoji ile
+      // kimlik taklidini (impersonation) engeller.
+      if(!/^[A-Za-zÇĞİIıÖŞÜçğıöşü0-9 ]+$/.test(name)){err.textContent=T('nameInvalidChars');return;}
       okBtn.disabled=true;
       okBtn.textContent=T('checkingBtn');
       const res=await registerUser(name);
@@ -2069,8 +2077,8 @@ async function showLeaderboard(){
     row.className='lbRow'+(d.name===USERNAME?' me':'');
     const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1)+'.';
     row.innerHTML=`<span class="rank">${medal}</span>
-      <span class="name">${d.name.replace(/</g,'&lt;')}<br><span class="title">${d.title||''} • 🧠 IQ ${d.iq||85}</span></span>
-      <span class="score">⭐ ${d.score||0}</span>`;
+      <span class="name">${escHtml(d.name)}<br><span class="title">${escHtml(d.title||'')} • 🧠 IQ ${Number(d.iq)||85}</span></span>
+      <span class="score">⭐ ${Number(d.score)||0}</span>`;
     list.appendChild(row);
   });
 }
@@ -2281,7 +2289,7 @@ const I18N={
     hintOver:'💡 No hints left', hintUsedT:'💡 Hint',
     adWait:'Ad:', adDone:'Ad finished!', adClose:'✕ Close Ad & Solve',
     allDone:'🏆 You finished all 255 levels!', empty:'cells empty — only the target must stay empty',
-    lbTitle:'🏆 Champions League', lbEmpty:'Nobody yet — be the first!', close:'✕ Close', rankUp:'ranks up', rankDown:'ranks down', rankSame:'no change', rankUnavailable:'Ranking unavailable', rankEntered:'entered the ranking', newTitleLabel:'New Title Unlocked!', currentTitleLabel:'Your Title', offlineRequired:'Internet connection required to create a username', nameTaken:'This username is already taken!', nameTooShort:'Must be at least 3 characters', nameTooLong:'Max 16 characters', startBtn:'Start ▶', checkingBtn:'Checking...', retryBtn:'⟳ Retry', offlineMode:'Offline — score, IQ & ranking disabled',
+    lbTitle:'🏆 Champions League', lbEmpty:'Nobody yet — be the first!', close:'✕ Close', rankUp:'ranks up', rankDown:'ranks down', rankSame:'no change', rankUnavailable:'Ranking unavailable', rankEntered:'entered the ranking', newTitleLabel:'New Title Unlocked!', currentTitleLabel:'Your Title', offlineRequired:'Internet connection required to create a username', nameTaken:'This username is already taken!', nameTooShort:'Must be at least 3 characters', nameTooLong:'Max 16 characters', nameInvalidChars:'Only letters, numbers and spaces allowed', startBtn:'Start ▶', checkingBtn:'Checking...', retryBtn:'⟳ Retry', offlineMode:'Offline — score, IQ & ranking disabled',
     score:'Score', bonusHint:'Bonus hint earned!', newUser:'👤 New Username', newGame:'🆕 New Game', continueGame:'▶️ Continue', welcomeBack:'Welcome back', alreadySolved:'Already solved — no points', demoTitle:'Tutorial', demoSub:'Watch how the game works', skipTutorial:'Skip Tutorial', demoWelcome:'👋 Welcome! Let\'s see how it works...', demoDrag:'👆 Hold & drag the piece onto the board', demoComplete:'✅ That\'s it! Now try it yourself'
   },
   tr:{
@@ -2299,7 +2307,7 @@ const I18N={
     hintOver:'💡 İpucu hakkın bitti', hintUsedT:'💡 İpucu',
     adWait:'Reklam:', adDone:'Reklam bitti!', adClose:'✕ Reklamı Kapat ve Çöz',
     allDone:'🏆 Tüm 255 bölümü bitirdin!', empty:'kare boş kaldı — sadece hedef kare boş olmalı',
-    lbTitle:'🏆 Şampiyonlar Ligi', lbEmpty:'Henüz kimse yok — ilk sen ol!', close:'✕ Kapat', rankUp:'sıra yükseldi', rankDown:'sıra düştü', rankSame:'değişim yok', rankUnavailable:'Sıralama alınamadı', rankEntered:'sıralamaya girdi', newTitleLabel:'Yeni Ünvan Kazandın!', currentTitleLabel:'Ünvanın', offlineRequired:'Kullanıcı adı oluşturmak için internet bağlantısı gerekli', nameTaken:'Bu kullanıcı adı zaten alınmış!', nameTooShort:'En az 3 karakter olmalı', nameTooLong:'En fazla 16 karakter', startBtn:'Başla ▶', checkingBtn:'Kontrol ediliyor...', retryBtn:'⟳ Tekrar Dene', offlineMode:'Çevrimdışı — puan, IQ ve sıralama devre dışı',
+    lbTitle:'🏆 Şampiyonlar Ligi', lbEmpty:'Henüz kimse yok — ilk sen ol!', close:'✕ Kapat', rankUp:'sıra yükseldi', rankDown:'sıra düştü', rankSame:'değişim yok', rankUnavailable:'Sıralama alınamadı', rankEntered:'sıralamaya girdi', newTitleLabel:'Yeni Ünvan Kazandın!', currentTitleLabel:'Ünvanın', offlineRequired:'Kullanıcı adı oluşturmak için internet bağlantısı gerekli', nameTaken:'Bu kullanıcı adı zaten alınmış!', nameTooShort:'En az 3 karakter olmalı', nameTooLong:'En fazla 16 karakter', nameInvalidChars:'Sadece harf, rakam ve boşluk kullanılabilir', startBtn:'Başla ▶', checkingBtn:'Kontrol ediliyor...', retryBtn:'⟳ Tekrar Dene', offlineMode:'Çevrimdışı — puan, IQ ve sıralama devre dışı',
     score:'Puan', bonusHint:'Bonus ipucu kazandın!', newUser:'👤 Yeni Kullanıcı Adı', newGame:'🆕 Yeni Oyun', continueGame:'▶️ Devam Et', welcomeBack:'Tekrar hoş geldin', alreadySolved:'Zaten çözülmüş — puan yok', demoTitle:'Tanıtım', demoSub:'Oyunun nasıl oynandığını izle', skipTutorial:'Tanıtımı Geç', demoWelcome:'👋 Hoş geldin! Nasıl oynandığına bakalım...', demoDrag:'👆 Parçayı basılı tutup tahtaya sürükle', demoComplete:'✅ İşte bu kadar! Şimdi sıra sende'
   },
   es:{
@@ -2317,7 +2325,7 @@ const I18N={
     hintOver:'💡 Sin pistas', hintUsedT:'💡 Pista',
     adWait:'Anuncio:', adDone:'¡Anuncio terminado!', adClose:'✕ Cerrar y Resolver',
     allDone:'🏆 ¡Completaste los 255 niveles!', empty:'casillas vacías — solo el objetivo debe quedar vacío',
-    lbTitle:'🏆 Liga de Campeones', lbEmpty:'Nadie aún — ¡sé el primero!', close:'✕ Cerrar', rankUp:'subió de puesto', rankDown:'bajó de puesto', rankSame:'sin cambio', rankUnavailable:'Ranking no disponible', rankEntered:'entró al ranking', newTitleLabel:'¡Nuevo Título Desbloqueado!', currentTitleLabel:'Tu Título', offlineRequired:'Se requiere conexión a internet para crear un nombre de usuario', nameTaken:'¡Este nombre de usuario ya está en uso!', nameTooShort:'Debe tener al menos 3 caracteres', nameTooLong:'Máximo 16 caracteres', startBtn:'Comenzar ▶', checkingBtn:'Verificando...', retryBtn:'⟳ Reintentar', offlineMode:'Sin conexión — puntos, IQ y ranking desactivados',
+    lbTitle:'🏆 Liga de Campeones', lbEmpty:'Nadie aún — ¡sé el primero!', close:'✕ Cerrar', rankUp:'subió de puesto', rankDown:'bajó de puesto', rankSame:'sin cambio', rankUnavailable:'Ranking no disponible', rankEntered:'entró al ranking', newTitleLabel:'¡Nuevo Título Desbloqueado!', currentTitleLabel:'Tu Título', offlineRequired:'Se requiere conexión a internet para crear un nombre de usuario', nameTaken:'¡Este nombre de usuario ya está en uso!', nameTooShort:'Debe tener al menos 3 caracteres', nameTooLong:'Máximo 16 caracteres', nameInvalidChars:'Solo letras, números y espacios', startBtn:'Comenzar ▶', checkingBtn:'Verificando...', retryBtn:'⟳ Reintentar', offlineMode:'Sin conexión — puntos, IQ y ranking desactivados',
     score:'Puntos', bonusHint:'¡Pista extra ganada!', newUser:'👤 Nuevo Usuario', newGame:'🆕 Nuevo Juego', continueGame:'▶️ Continuar', welcomeBack:'Bienvenido de nuevo', alreadySolved:'Ya resuelto — sin puntos', demoTitle:'Tutorial', demoSub:'Mira cómo funciona el juego', skipTutorial:'Omitir Tutorial', demoWelcome:'👋 ¡Bienvenido! Veamos cómo funciona...', demoDrag:'👆 Mantén y arrastra la pieza al tablero', demoComplete:'✅ ¡Eso es todo! Ahora inténtalo tú'
   },
   ar:{
@@ -2335,7 +2343,7 @@ const I18N={
     hintOver:'💡 انتهت التلميحات', hintUsedT:'💡 تلميح',
     adWait:'إعلان:', adDone:'انتهى الإعلان!', adClose:'✕ أغلق وحُل',
     allDone:'🏆 أنهيت كل الـ255 مرحلة!', empty:'خانات فارغة — فقط الهدف يجب أن يبقى فارغاً',
-    lbTitle:'🏆 دوري الأبطال', lbEmpty:'لا أحد بعد — كن الأول!', close:'✕ إغلاق', rankUp:'ترقية بالترتيب', rankDown:'تراجع بالترتيب', rankSame:'بدون تغيير', rankUnavailable:'الترتيب غير متاح', rankEntered:'دخل الترتيب', newTitleLabel:'لقب جديد مفتوح!', currentTitleLabel:'لقبك', offlineRequired:'يلزم الاتصال بالإنترنت لإنشاء اسم مستخدم', nameTaken:'اسم المستخدم هذا مُستخدم بالفعل!', nameTooShort:'يجب ألا يقل عن 3 أحرف', nameTooLong:'الحد الأقصى 16 حرفاً', startBtn:'ابدأ ▶', checkingBtn:'جارٍ التحقق...', retryBtn:'⟳ أعد المحاولة', offlineMode:'غير متصل — النقاط والذكاء والترتيب معطلة',
+    lbTitle:'🏆 دوري الأبطال', lbEmpty:'لا أحد بعد — كن الأول!', close:'✕ إغلاق', rankUp:'ترقية بالترتيب', rankDown:'تراجع بالترتيب', rankSame:'بدون تغيير', rankUnavailable:'الترتيب غير متاح', rankEntered:'دخل الترتيب', newTitleLabel:'لقب جديد مفتوح!', currentTitleLabel:'لقبك', offlineRequired:'يلزم الاتصال بالإنترنت لإنشاء اسم مستخدم', nameTaken:'اسم المستخدم هذا مُستخدم بالفعل!', nameTooShort:'يجب ألا يقل عن 3 أحرف', nameTooLong:'الحد الأقصى 16 حرفاً', nameInvalidChars:'الأحرف والأرقام والمسافات فقط', startBtn:'ابدأ ▶', checkingBtn:'جارٍ التحقق...', retryBtn:'⟳ أعد المحاولة', offlineMode:'غير متصل — النقاط والذكاء والترتيب معطلة',
     score:'النقاط', bonusHint:'حصلت على تلميح إضافي!', newUser:'👤 اسم مستخدم جديد', newGame:'🆕 لعبة جديدة', continueGame:'▶️ متابعة', welcomeBack:'مرحباً بعودتك', alreadySolved:'تم حلها مسبقاً — بلا نقاط', demoTitle:'تعليمي', demoSub:'شاهد كيف تعمل اللعبة', skipTutorial:'تخطي الشرح', demoWelcome:'👋 مرحباً! لنرَ كيف تعمل...', demoDrag:'👆 اضغط مطولاً واسحب القطعة إلى اللوحة', demoComplete:'✅ هذا كل شيء! الآن جرّب بنفسك'
   },
   ru:{
@@ -2353,7 +2361,7 @@ const I18N={
     hintOver:'💡 Подсказок нет', hintUsedT:'💡 Подсказка',
     adWait:'Реклама:', adDone:'Реклама окончена!', adClose:'✕ Закрыть и Решить',
     allDone:'🏆 Ты прошёл все 255 уровней!', empty:'клеток пусто — пустой должна быть только цель',
-    lbTitle:'🏆 Лига Чемпионов', lbEmpty:'Пока никого — будь первым!', close:'✕ Закрыть', rankUp:'подъём в рейтинге', rankDown:'падение в рейтинге', rankSame:'без изменений', rankUnavailable:'Рейтинг недоступен', rankEntered:'попал в рейтинг', newTitleLabel:'Новое звание получено!', currentTitleLabel:'Твоё звание', offlineRequired:'Для создания имени пользователя нужен интернет', nameTaken:'Это имя уже занято!', nameTooShort:'Минимум 3 символа', nameTooLong:'Максимум 16 символов', startBtn:'Начать ▶', checkingBtn:'Проверка...', retryBtn:'⟳ Повторить', offlineMode:'Офлайн — очки, IQ и рейтинг отключены',
+    lbTitle:'🏆 Лига Чемпионов', lbEmpty:'Пока никого — будь первым!', close:'✕ Закрыть', rankUp:'подъём в рейтинге', rankDown:'падение в рейтинге', rankSame:'без изменений', rankUnavailable:'Рейтинг недоступен', rankEntered:'попал в рейтинг', newTitleLabel:'Новое звание получено!', currentTitleLabel:'Твоё звание', offlineRequired:'Для создания имени пользователя нужен интернет', nameTaken:'Это имя уже занято!', nameTooShort:'Минимум 3 символа', nameTooLong:'Максимум 16 символов', nameInvalidChars:'Только буквы, цифры и пробелы', startBtn:'Начать ▶', checkingBtn:'Проверка...', retryBtn:'⟳ Повторить', offlineMode:'Офлайн — очки, IQ и рейтинг отключены',
     score:'Очки', bonusHint:'Получена бонусная подсказка!', newUser:'👤 Новый ник', newGame:'🆕 Новая игра', continueGame:'▶️ Продолжить', welcomeBack:'С возвращением', alreadySolved:'Уже решено — без очков', demoTitle:'Обучение', demoSub:'Посмотри, как играть', skipTutorial:'Пропустить', demoWelcome:'👋 Добро пожаловать! Посмотрим как это работает...', demoDrag:'👆 Удерживай и тяни фигуру на доску', demoComplete:'✅ Вот и всё! Теперь попробуй сам'
   }
 };
