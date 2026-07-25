@@ -292,6 +292,23 @@ button:disabled{opacity:.35;cursor:default}
   text-shadow:0 0 14px rgba(255,200,60,.8);margin:2px 0}
 .titleUpReward{font-size:clamp(.75rem,3vw,.92rem);color:#fff2cc;font-weight:700}
 </style>
+<!-- Firebase (Firestore) — merkezi kullanıcı adı / skor / liderlik verisi için -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBMcuXyZBDCuZ8ZiqKsheh41LqUyWDU5b8",
+  authDomain: "mindgap-c51b7.firebaseapp.com",
+  databaseURL: "https://mindgap-c51b7-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "mindgap-c51b7",
+  storageBucket: "mindgap-c51b7.firebasestorage.app",
+  messagingSenderId: "712682738039",
+  appId: "1:712682738039:web:0ea244284184c36ebc5172",
+  measurementId: "G-H0QKEZ8WZ1"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+</script>
 </head>
 <body>
 
@@ -1807,21 +1824,21 @@ function iqFor(level){
 
 let USERNAME=localStorage_get('pz_user')||'';
 
-// storage yardımcıları: artifact storage varsa onu, yoksa localStorage
+// storage yardımcıları: Firestore (merkezi/shared) + localStorage (kişisel)
 // ═══════════════════════════════════════════════════════
 // BAĞLANTI DURUMU — kullanıcı adı benzersizliği ve skor/IQ/sıralama
-// SADECE gerçek merkezi storage (window.storage) erişilebilirken çalışır.
-// window.storage yoksa/hataysa cihaz "offline" kabul edilir; bu durumda
+// SADECE gerçek Firestore veritabanına erişilebilirken çalışır.
+// Bağlantı yoksa/hataysa cihaz "offline" kabul edilir; bu durumda
 // localStorage'a asla kullanıcı-adı veya skor verisi YAZILMAZ —
 // çünkü offline yazılan veri benzersizliği garanti edemez.
 // ═══════════════════════════════════════════════════════
 let ONLINE_OK=null; // null=henüz test edilmedi, true/false=son bilinen durum
 
 async function checkOnline(){
-  if(!window.storage){ ONLINE_OK=false; updateOfflineBadge(); return false; }
   try{
-    // Hafif bir "ping": rastgele olmayan sabit bir anahtarı okumayı dene.
-    await window.storage.get('__conn_check__', true);
+    // Hafif bir "ping": var olmayan bir dokümanı okumak bile bağlantıyı doğrular
+    // (doküman yoksa hata atmaz, sadece exists:false döner — sadece ağ hatası fırlatır).
+    await db.collection('_meta').doc('ping').get();
     ONLINE_OK=true;
     updateOfflineBadge();
     return true;
@@ -1843,40 +1860,39 @@ function updateOfflineBadge(){
   }
 }
 
-// Paylaşımlı (shared) veriler için storage yardımcıları.
-// Bunlar SADECE gerçek merkezi storage üzerinde çalışır — offline'da
+// Paylaşımlı (shared) veriler için storage yardımcıları — artık Firestore'a yazıyor.
+// Bunlar SADECE gerçek bağlantı üzerinde çalışır — offline'da
 // başarısız olur (localStorage'a düşmez), çünkü bu veriler benzersizlik/
 // doğruluk gerektirir (kullanıcı adları, skorlar, sıralama).
+// Tüm shared anahtarlar tek bir koleksiyonda ('shared_kv') doküman ID'si
+// olarak tam anahtarla (örn. "user:ahmet", "score:ahmet") saklanır.
 async function sGetShared(key){
-  if(!window.storage) throw new Error('offline');
-  const r=await window.storage.get(key,true);
-  return r?r.value:null;
+  const doc=await db.collection('shared_kv').doc(key).get();
+  return doc.exists ? doc.data().value : null;
 }
 async function sSetShared(key,val){
-  if(!window.storage) throw new Error('offline');
-  await window.storage.set(key,val,true);
+  await db.collection('shared_kv').doc(key).set({
+    value: val,
+    updated: firebase.firestore.FieldValue.serverTimestamp()
+  });
   return true;
 }
 async function sListShared(prefix){
-  if(!window.storage) throw new Error('offline');
-  const r=await window.storage.list(prefix,true);
-  return r?r.keys:[];
+  const snap=await db.collection('shared_kv')
+    .where(firebase.firestore.FieldPath.documentId(), '>=', prefix)
+    .where(firebase.firestore.FieldPath.documentId(), '<', prefix+'\uf8ff')
+    .get();
+  return snap.docs.map(d=>d.id);
 }
 
 // Kişisel (shared olmayan) veriler için — bunlar cihaza özel olduğundan
-// localStorage fallback'i kabul edilebilir (senkronizasyon gerektirmez).
+// sadece localStorage kullanılır (senkronizasyon gerektirmez).
 async function sGet(key,shared){
   if(shared) return sGetShared(key);
-  try{
-    if(window.storage){const r=await window.storage.get(key,false);return r?r.value:null;}
-  }catch(e){}
   return localStorage_get('s_'+key);
 }
 async function sSet(key,val,shared){
   if(shared) return sSetShared(key,val);
-  try{
-    if(window.storage){await window.storage.set(key,val,false);return true;}
-  }catch(e){}
   localStorage_set('s_'+key,val);return true;
 }
 async function sList(prefix,shared){
