@@ -1,8 +1,7 @@
 name: Build Android APK & AAB
 
 # Ne zaman çalışır:
-# - main branch'e push olduğunda (istersen aşağıdaki 'paths' filtresiyle
-#   sadece belirli dosyalar değiştiğinde tetiklenmesini sağlayabilirsin)
+# - main branch'e push olduğunda
 # - Actions sekmesinden manuel "Run workflow" ile de tetiklenebilir
 on:
   push:
@@ -12,6 +11,7 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
+    timeout-minutes: 20   # tüm job en fazla 20dk sürsün, takılırsa otomatik durur
 
     steps:
       - name: Repo'yu çek
@@ -23,6 +23,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # Android SDK'yı ÖNCEDEN kuruyoruz ki Bubblewrap "SDK indireyim mi?"
+      # diye sormasın — bu, takılmanın en olası sebebiydi.
+      - name: Android SDK kur
+        uses: android-actions/setup-android@v3
+
       - name: Node.js kur
         uses: actions/setup-node@v4
         with:
@@ -31,48 +36,49 @@ jobs:
       - name: Bubblewrap CLI kur
         run: npm install -g @bubblewrap/cli
 
-      # ── İmzalama anahtarı (keystore) ──
-      # Bu, APK/AAB'yi imzalamak için gerekli. İlk seferde bir keystore
-      # üretip GitHub repo secrets'a base64 olarak kaydetmen gerekiyor.
       - name: Keystore'u geri yükle
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
 
-      # Bubblewrap'in normal akışı: önce "init" ile web manifest'ten bir TWA
-      # projesi oluşturulur (bu adım JDK/Android SDK kurulumu sorar — CI'da
-      # interaktif soruya cevap veremeyeceğimiz için "yes" ile otomatik
-      # "evet" besliyoruz), sonra o proje klasöründe "build" çalıştırılır.
+      # ANDROID_HOME zaten setup-android action'ı tarafından ayarlanıyor,
+      # bu yüzden Bubblewrap "SDK nerede?" diye sormayacak.
       - name: TWA projesini oluştur (init)
+        timeout-minutes: 8
         run: |
-          yes | bubblewrap init \
+          yes "" | bubblewrap init \
             --manifest="https://nuhkozan.github.io/mindgap/manifest.json" \
             --directory="./twa-project" \
             2>&1 | tee init.log
-        continue-on-error: true
+          echo "---- init tamamlandı ----"
 
       - name: init.log içeriğini göster (hata ayıklama için)
-        run: cat init.log
+        if: always()
+        run: cat init.log || echo "init.log bulunamadı"
+
+      - name: twa-project klasörünü listele (hata ayıklama için)
+        if: always()
+        run: ls -la ./twa-project || echo "twa-project klasörü oluşmamış"
 
       - name: twa-manifest.json'ı proje klasörüne kopyala
-        run: |
-          cp twa-manifest.json ./twa-project/twa-manifest.json
+        run: cp twa-manifest.json ./twa-project/twa-manifest.json
 
       - name: keystore'u proje klasörüne kopyala
-        run: |
-          cp android.keystore ./twa-project/android.keystore
+        run: cp android.keystore ./twa-project/android.keystore
 
       - name: TWA'yı build et (APK + AAB üret)
+        timeout-minutes: 8
         working-directory: ./twa-project
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          yes | bubblewrap build \
+          yes "" | bubblewrap build \
             --skipPwaValidation \
             2>&1 | tee ../build.log
 
       - name: build.log içeriğini göster (hata ayıklama için)
-        run: cat build.log
+        if: always()
+        run: cat build.log || echo "build.log bulunamadı"
 
       - name: APK ve AAB dosyalarını bul
         id: find_files
@@ -83,20 +89,21 @@ jobs:
           echo "Bulunan AAB: $(find ./twa-project -name '*.aab')"
 
       - name: Artifact olarak yükle (APK)
+        if: steps.find_files.outputs.apk_path != ''
         uses: actions/upload-artifact@v4
         with:
           name: mindgap-apk
           path: ${{ steps.find_files.outputs.apk_path }}
 
       - name: Artifact olarak yükle (AAB)
+        if: steps.find_files.outputs.aab_path != ''
         uses: actions/upload-artifact@v4
         with:
           name: mindgap-aab
           path: ${{ steps.find_files.outputs.aab_path }}
 
-      # İsteğe bağlı: her başarılı build'i otomatik bir GitHub Release'e ekle
       - name: GitHub Release oluştur (opsiyonel)
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && steps.find_files.outputs.apk_path != ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
