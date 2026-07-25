@@ -1,11 +1,6 @@
 #!/usr/bin/env node
-/**
- * Bubblewrap CLI'yi gerçek bir pseudo-terminal (PTY) üzerinden çalıştırıp,
- * sorduğu sorulara çıktıyı canlı izleyerek doğru cevabı gönderir.
- *
- * Kullanım: node run-bubblewrap.js "<komut ve argümanlar>" [cwd]
- */
-const pty = require('node-pty');
+/** * Bubblewrap CLI'yi gerçek bir pseudo-terminal (PTY) üzerinden çalıştırıp, * sorduğu sorulara çıktıyı canlı izleyerek doğru cevabı gönderir. * * Kullanım: node run-bubblewrap.js "<komut ve argümanlar>" [cwd] */
+const pty = require("node-pty");
 
 const fullCommand = process.argv[2];
 const cwd = process.argv[3] || process.cwd();
@@ -15,49 +10,62 @@ if (!fullCommand) {
   process.exit(1);
 }
 
-const JAVA_HOME = process.env.JAVA_HOME || '';
-const ANDROID_HOME = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || '';
+const JAVA_HOME = process.env.JAVA_HOME || "";
+const ANDROID_HOME =
+  process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || "";
 console.log(`[debug] JAVA_HOME=${JAVA_HOME}`);
 console.log(`[debug] ANDROID_HOME=${ANDROID_HOME}`);
 
-const shell = '/bin/bash';
-const args = ['-c', fullCommand];
+const shell = "/bin/bash";
+const args = ["-c", fullCommand];
 
 const ptyProcess = pty.spawn(shell, args, {
-  name: 'xterm-color',
+  name: "xterm-color",
   cols: 200,
   rows: 50,
   cwd: cwd,
   env: process.env,
 });
 
-let outputBuffer = '';
+let outputBuffer = "";
 let finished = false;
 
 const RULES = [
-  { name: 'install-jdk', pattern: /install the JDK/i, answer: () => 'n\r' },
-  { name: 'install-sdk', pattern: /install.*Android SDK/i, answer: () => 'n\r' },
+  { name: "install-jdk", pattern: /install the JDK/i, answer: () => "n\r" },
   {
-    name: 'jdk-path',
+    name: "install-sdk",
+    pattern: /install.*Android SDK/i,
+    answer: () => "n\r",
+  },
+  {
+    name: "jdk-path",
     pattern: /Path to your existing JDK/i,
     answer: () => {
-      if (!JAVA_HOME) console.error('[HATA] JAVA_HOME boş!');
-      return JAVA_HOME + '\r';
+      if (!JAVA_HOME) console.error("[HATA] JAVA_HOME boş!");
+      return JAVA_HOME + "\r";
     },
   },
   {
-    name: 'sdk-path',
+    name: "sdk-path",
     pattern: /Path to your existing Android SDK/i,
     answer: () => {
-      if (!ANDROID_HOME) console.error('[HATA] ANDROID_HOME boş!');
-      return ANDROID_HOME + '\r';
+      if (!ANDROID_HOME) console.error("[HATA] ANDROID_HOME boş!");
+      return ANDROID_HOME + "\r";
     },
   },
-  { name: 'regenerate', pattern: /regenerate your project/i, answer: () => 'n\r' },
-  { name: 'checksum', pattern: /checksum/i, answer: () => 'n\r' },
-  { name: 'yn-default', pattern: /\(Y\/n\)\s*$/i, answer: () => '\r' },
-  { name: 'ny-default', pattern: /\(y\/N\)\s*$/i, answer: () => 'n\r' },
-  { name: 'press-continue', pattern: /Press.*to continue/i, answer: () => '\r' },
+  {
+    name: "regenerate",
+    pattern: /regenerate your project/i,
+    answer: () => "n\r",
+  },
+  { name: "checksum", pattern: /checksum/i, answer: () => "n\r" },
+  { name: "yn-default", pattern: /\(Y\/n\)\s*$/i, answer: () => "\r" },
+  { name: "ny-default", pattern: /\(y\/N\)\s*$/i, answer: () => "n\r" },
+  {
+    name: "press-continue",
+    pattern: /Press.*to continue/i,
+    answer: () => "\r",
+  },
 ];
 
 // Her kural için: en son ne zaman tetiklendi VE o tetikleme sırasında
@@ -79,7 +87,11 @@ function checkAndAnswer() {
 
     // Aynı kural, aynı eşleşen metinle, çok kısa sürede (1sn) tekrar geldiyse
     // muhtemelen aynı soruyu tekrar görüyoruz (henüz cevap işlenmedi) — atla.
-    if (state && state.lastMatchedText === matchedText && now - state.lastFiredAt < 1000) {
+    if (
+      state &&
+      state.lastMatchedText === matchedText &&
+      now - state.lastFiredAt < 1000
+    ) {
       continue;
     }
 
@@ -87,7 +99,9 @@ function checkAndAnswer() {
     if (state && now - state.firstFiredAt < 6000) {
       state.count = (state.count || 1) + 1;
       if (state.count >= 5) {
-        console.error(`[HATA] Kural "${rule.name}" 6sn içinde ${state.count} kez tetiklendi — döngü. Durduruluyor.`);
+        console.error(
+          `[HATA] Kural "${rule.name}" 6sn içinde ${state.count} kez tetiklendi — döngü. Durduruluyor.`
+        );
         ptyProcess.kill();
         process.exit(1);
       }
@@ -99,9 +113,11 @@ function checkAndAnswer() {
     ruleState[rule.name].lastMatchedText = matchedText;
 
     const answer = rule.answer();
-    console.log(`\n[eşleşti] Kural: "${rule.name}" -> gönderilen: ${JSON.stringify(answer)}`);
+    console.log(
+      `\n[eşleşti] Kural: "${rule.name}" -> gönderilen: ${JSON.stringify( answer )}`
+    );
     ptyProcess.write(answer);
-    outputBuffer = '';
+    outputBuffer = "";
     return true;
   }
   return false;
@@ -124,8 +140,10 @@ ptyProcess.onExit(({ exitCode }) => {
 
 setTimeout(() => {
   if (!finished) {
-    console.error('\n---- ZAMAN AŞIMI: komut belirlenen sürede bitmedi, sonlandırılıyor ----');
+    console.error(
+      "\n---- ZAMAN AŞIMI: komut belirlenen sürede bitmedi, sonlandırılıyor ----"
+    );
     ptyProcess.kill();
     process.exit(1);
   }
-}, 8 * 60 * 1000);z
+}, 8 * 60 * 1000);
