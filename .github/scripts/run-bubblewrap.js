@@ -15,8 +15,6 @@ if (!fullCommand) {
   process.exit(1);
 }
 
-// JDK/SDK yolları erkenden kontrol edilsin — boşsa hemen net bir hata verelim,
-// sessizce boş cevap gönderip soruyu sonsuz döngüye sokmasın.
 const JAVA_HOME = process.env.JAVA_HOME || '';
 const ANDROID_HOME = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || '';
 console.log(`[debug] JAVA_HOME=${JAVA_HOME}`);
@@ -35,10 +33,7 @@ const ptyProcess = pty.spawn(shell, args, {
 
 let outputBuffer = '';
 let finished = false;
-let lastAnswerTime = 0;
-const MIN_GAP_MS = 500;
 
-// Bilinen soru kalıpları -> gönderilecek cevap. Sırayla denenir, ilk eşleşen kazanır.
 const RULES = [
   { name: 'install-jdk', pattern: /install the JDK/i, answer: () => 'n\r' },
   { name: 'install-sdk', pattern: /install.*Android SDK/i, answer: () => 'n\r' },
@@ -46,9 +41,7 @@ const RULES = [
     name: 'jdk-path',
     pattern: /Path to your existing JDK/i,
     answer: () => {
-      if (!JAVA_HOME) {
-        console.error('[HATA] JAVA_HOME boş, JDK yolu sorusuna cevap verilemiyor!');
-      }
+      if (!JAVA_HOME) console.error('[HATA] JAVA_HOME boş!');
       return JAVA_HOME + '\r';
     },
   },
@@ -56,9 +49,7 @@ const RULES = [
     name: 'sdk-path',
     pattern: /Path to your existing Android SDK/i,
     answer: () => {
-      if (!ANDROID_HOME) {
-        console.error('[HATA] ANDROID_HOME boş, SDK yolu sorusuna cevap verilemiyor!');
-      }
+      if (!ANDROID_HOME) console.error('[HATA] ANDROID_HOME boş!');
       return ANDROID_HOME + '\r';
     },
   },
@@ -69,48 +60,60 @@ const RULES = [
   { name: 'press-continue', pattern: /Press.*to continue/i, answer: () => '\r' },
 ];
 
-// Her kural için son ne zaman tetiklendiğini takip ediyoruz — aynı kural
-// çok kısa sürede İKİ KEZ tetiklenirse (muhtemel döngü), zorla durduruyoruz.
-const ruleLastFired = {};
-const REPEAT_LIMIT_MS = 2000;
+// Her kural için: en son ne zaman tetiklendi VE o tetikleme sırasında
+// buffer'da ne vardı (aynı soru metni tekrar görülürse yanıt vermeyiz,
+// gerçekten farklı/yeni bir soruysa veririz).
+const ruleState = {}; // { [ruleName]: { lastFiredAt, lastMatchedText } }
 let sameRuleRepeatCount = 0;
+
+function checkAndAnswer() {
+  const tail = outputBuffer.slice(-600);
+  const now = Date.now();
+
+  for (const rule of RULES) {
+    const match = tail.match(rule.pattern);
+    if (!match) continue;
+
+    const matchedText = match[0];
+    const state = ruleState[rule.name];
+
+    // Aynı kural, aynı eşleşen metinle, çok kısa sürede (1sn) tekrar geldiyse
+    // muhtemelen aynı soruyu tekrar görüyoruz (henüz cevap işlenmedi) — atla.
+    if (state && state.lastMatchedText === matchedText && now - state.lastFiredAt < 1000) {
+      continue;
+    }
+
+    // Genel döngü koruması: aynı kural 6 saniye içinde 5+ kez tetiklendiyse dur.
+    if (state && now - state.firstFiredAt < 6000) {
+      state.count = (state.count || 1) + 1;
+      if (state.count >= 5) {
+        console.error(`[HATA] Kural "${rule.name}" 6sn içinde ${state.count} kez tetiklendi — döngü. Durduruluyor.`);
+        ptyProcess.kill();
+        process.exit(1);
+      }
+    } else {
+      ruleState[rule.name] = { firstFiredAt: now, count: 1 };
+    }
+
+    ruleState[rule.name].lastFiredAt = now;
+    ruleState[rule.name].lastMatchedText = matchedText;
+
+    const answer = rule.answer();
+    console.log(`\n[eşleşti] Kural: "${rule.name}" -> gönderilen: ${JSON.stringify(answer)}`);
+    ptyProcess.write(answer);
+    outputBuffer = '';
+    return true;
+  }
+  return false;
+}
 
 ptyProcess.onData((data) => {
   process.stdout.write(data);
   outputBuffer += data;
   if (outputBuffer.length > 5000) {
-    outputBuffer = outputBuffer.slice(-2000); // bellek şişmesin
+    outputBuffer = outputBuffer.slice(-2000);
   }
-
-  const now = Date.now();
-  if (now - lastAnswerTime < MIN_GAP_MS) return;
-
-  const tail = outputBuffer.slice(-600);
-
-  for (const rule of RULES) {
-    if (rule.pattern.test(tail)) {
-      const lastFired = ruleLastFired[rule.name] || 0;
-      if (now - lastFired < REPEAT_LIMIT_MS) {
-        sameRuleRepeatCount++;
-        console.error(`[uyarı] Kural "${rule.name}" çok kısa sürede tekrar tetiklendi (${sameRuleRepeatCount}. kez) — muhtemel döngü.`);
-        if (sameRuleRepeatCount >= 4) {
-          console.error(`[HATA] Aynı soru 4+ kez tekrarlandı, sonsuz döngü tespit edildi. Sonlandırılıyor.`);
-          ptyProcess.kill();
-          process.exit(1);
-        }
-      } else {
-        sameRuleRepeatCount = 0;
-      }
-      ruleLastFired[rule.name] = now;
-
-      const answer = rule.answer();
-      console.log(`\n[eşleşti] Kural: "${rule.name}" -> gönderilen: ${JSON.stringify(answer)}`);
-      ptyProcess.write(answer);
-      lastAnswerTime = now;
-      outputBuffer = '';
-      break;
-    }
-  }
+  checkAndAnswer();
 });
 
 ptyProcess.onExit(({ exitCode }) => {
@@ -125,4 +128,4 @@ setTimeout(() => {
     ptyProcess.kill();
     process.exit(1);
   }
-}, 8 * 60 * 1000);
+}, 8 * 60 * 1000);z
