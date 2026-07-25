@@ -1,7 +1,11 @@
 #!/usr/bin/env node
-/** * Bubblewrap CLI'yi gerçek bir pseudo-terminal (PTY) üzerinden çalıştırıp, * sorduğu sorulara çıktıyı canlı izleyerek doğru cevabı gönderir. * * NEDEN GEREKLİ: `bubblewrap init`/`build` komutları interaktif bir prompt * kütüphanesi (muhtemelen inquirer/enquirer) kullanıyor. `yes "n" | cmd` gibi * pipe'lar TTY olmadığından bu kütüphaneler bazen soruları yanlış sırayla * okuyor, aynı soruyu tekrar tekrar soruyor ya da varsayılan cevabı (Yes) * kabul ediyor. Gerçek bir PTY vermek, komutun normal bir terminalde * çalıştığını sanmasını sağlar ve bu tutarsızlığı ortadan kaldırır. * * Kullanım: node run-bubblewrap.js "<komut ve argümanlar>" [cwd] * Örnek: node run-bubblewrap.js "bubblewrap init --manifest=... --directory=./twa-project" */
-const pty = require("node-pty");
-const path = require("path");
+/**
+ * Bubblewrap CLI'yi gerçek bir pseudo-terminal (PTY) üzerinden çalıştırıp,
+ * sorduğu sorulara çıktıyı canlı izleyerek doğru cevabı gönderir.
+ *
+ * Kullanım: node run-bubblewrap.js "<komut ve argümanlar>" [cwd]
+ */
+const pty = require('node-pty');
 
 const fullCommand = process.argv[2];
 const cwd = process.argv[3] || process.cwd();
@@ -11,69 +15,99 @@ if (!fullCommand) {
   process.exit(1);
 }
 
-// Komutu shell üzerinden çalıştırıyoruz (env değişkenleri, PATH vs. doğru çözülsün diye)
-const shell = "/bin/bash";
-const args = ["-c", fullCommand];
+// JDK/SDK yolları erkenden kontrol edilsin — boşsa hemen net bir hata verelim,
+// sessizce boş cevap gönderip soruyu sonsuz döngüye sokmasın.
+const JAVA_HOME = process.env.JAVA_HOME || '';
+const ANDROID_HOME = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || '';
+console.log(`[debug] JAVA_HOME=${JAVA_HOME}`);
+console.log(`[debug] ANDROID_HOME=${ANDROID_HOME}`);
+
+const shell = '/bin/bash';
+const args = ['-c', fullCommand];
 
 const ptyProcess = pty.spawn(shell, args, {
-  name: "xterm-color",
-  cols: 120,
-  rows: 30,
+  name: 'xterm-color',
+  cols: 200,
+  rows: 50,
   cwd: cwd,
   env: process.env,
 });
 
-let outputBuffer = "";
+let outputBuffer = '';
 let finished = false;
+let lastAnswerTime = 0;
+const MIN_GAP_MS = 500;
 
-// Bilinen soru kalıpları -> gönderilecek cevap (regex sırayla denenir)
-// ÖNEMLİ: cevaplar Enter tuşuyla (\r) gönderilir, PTY'de \n değil \r kullanılır.
+// Bilinen soru kalıpları -> gönderilecek cevap. Sırayla denenir, ilk eşleşen kazanır.
 const RULES = [
-  // JDK/SDK otomatik kurulum soruları -> Hayır (zaten kurulu, biz sağlıyoruz)
-  { pattern: /install the JDK/i, answer: "n\r" },
-  { pattern: /install.*Android SDK/i, answer: "n\r" },
+  { name: 'install-jdk', pattern: /install the JDK/i, answer: () => 'n\r' },
+  { name: 'install-sdk', pattern: /install.*Android SDK/i, answer: () => 'n\r' },
   {
+    name: 'jdk-path',
     pattern: /Path to your existing JDK/i,
-    answer: (process.env.JAVA_HOME || "") + "\r",
+    answer: () => {
+      if (!JAVA_HOME) {
+        console.error('[HATA] JAVA_HOME boş, JDK yolu sorusuna cevap verilemiyor!');
+      }
+      return JAVA_HOME + '\r';
+    },
   },
   {
+    name: 'sdk-path',
     pattern: /Path to your existing Android SDK/i,
-    answer: (process.env.ANDROID_HOME || "") + "\r",
+    answer: () => {
+      if (!ANDROID_HOME) {
+        console.error('[HATA] ANDROID_HOME boş, SDK yolu sorusuna cevap verilemiyor!');
+      }
+      return ANDROID_HOME + '\r';
+    },
   },
-
-  // Checksum / proje yeniden oluşturma sorusu -> Hayır, mevcut projeyle devam et
-  { pattern: /regenerate your project/i, answer: "n\r" },
-  { pattern: /checksum/i, answer: "n\r" },
-
-  // Genel onay soruları (Y/n) -> varsayılanı kabul et (Enter)
-  { pattern: /\(Y\/n\)\s*$/i, answer: "\r" },
-  { pattern: /\(y\/N\)\s*$/i, answer: "n\r" },
-
-  // Genel "Enter" ile devam et kalıpları
-  { pattern: /Press.*to continue/i, answer: "\r" },
+  { name: 'regenerate', pattern: /regenerate your project/i, answer: () => 'n\r' },
+  { name: 'checksum', pattern: /checksum/i, answer: () => 'n\r' },
+  { name: 'yn-default', pattern: /\(Y\/n\)\s*$/i, answer: () => '\r' },
+  { name: 'ny-default', pattern: /\(y\/N\)\s*$/i, answer: () => 'n\r' },
+  { name: 'press-continue', pattern: /Press.*to continue/i, answer: () => '\r' },
 ];
 
-// Aynı soruya kısa sürede tekrar cevap vermemek için basit bir "son cevap zamanı" takibi
-let lastAnswerTime = 0;
-const MIN_GAP_MS = 300;
+// Her kural için son ne zaman tetiklendiğini takip ediyoruz — aynı kural
+// çok kısa sürede İKİ KEZ tetiklenirse (muhtemel döngü), zorla durduruyoruz.
+const ruleLastFired = {};
+const REPEAT_LIMIT_MS = 2000;
+let sameRuleRepeatCount = 0;
 
 ptyProcess.onData((data) => {
-  process.stdout.write(data); // gerçek zamanlı log için GitHub Actions çıktısına da yazdır
+  process.stdout.write(data);
   outputBuffer += data;
+  if (outputBuffer.length > 5000) {
+    outputBuffer = outputBuffer.slice(-2000); // bellek şişmesin
+  }
 
-  // Sadece son birkaç satırı kontrol et (performans + eski eşleşmeleri tekrar tetiklememek için)
-  const tail = outputBuffer.slice(-400);
   const now = Date.now();
-
   if (now - lastAnswerTime < MIN_GAP_MS) return;
+
+  const tail = outputBuffer.slice(-600);
 
   for (const rule of RULES) {
     if (rule.pattern.test(tail)) {
-      const answer =
-        typeof rule.answer === "function" ? rule.answer() : rule.answer;
+      const lastFired = ruleLastFired[rule.name] || 0;
+      if (now - lastFired < REPEAT_LIMIT_MS) {
+        sameRuleRepeatCount++;
+        console.error(`[uyarı] Kural "${rule.name}" çok kısa sürede tekrar tetiklendi (${sameRuleRepeatCount}. kez) — muhtemel döngü.`);
+        if (sameRuleRepeatCount >= 4) {
+          console.error(`[HATA] Aynı soru 4+ kez tekrarlandı, sonsuz döngü tespit edildi. Sonlandırılıyor.`);
+          ptyProcess.kill();
+          process.exit(1);
+        }
+      } else {
+        sameRuleRepeatCount = 0;
+      }
+      ruleLastFired[rule.name] = now;
+
+      const answer = rule.answer();
+      console.log(`\n[eşleşti] Kural: "${rule.name}" -> gönderilen: ${JSON.stringify(answer)}`);
       ptyProcess.write(answer);
       lastAnswerTime = now;
-      outputBuffer = ""; // eşleşen kısmı temizle, tekrar tetiklenmesin
+      outputBuffer = '';
       break;
     }
   }
@@ -85,13 +119,10 @@ ptyProcess.onExit(({ exitCode }) => {
   process.exit(exitCode);
 });
 
-// Güvenlik ağı: 10 dakika içinde bitmezse zorla sonlandır
 setTimeout(() => {
   if (!finished) {
-    console.error(
-      "\n---- ZAMAN AŞIMI: komut 10 dakikada bitmedi, sonlandırılıyor ----"
-    );
+    console.error('\n---- ZAMAN AŞIMI: komut belirlenen sürede bitmedi, sonlandırılıyor ----');
     ptyProcess.kill();
     process.exit(1);
   }
-}, 10 * 60 * 1000);
+}, 8 * 60 * 1000);
