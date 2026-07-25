@@ -70,7 +70,7 @@ EOF
 # ---------- root build.gradle ----------
 cat > "$PROJ/build.gradle" << 'EOF'
 plugins {
-    id 'com.android.application' version '8.1.4' apply false
+    id 'com.android.application' version '8.10.0' apply false
 }
 EOF
 
@@ -89,12 +89,12 @@ plugins {
 
 android {
     namespace '$PACKAGE_ID'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId "$PACKAGE_ID"
         minSdk 23
-        targetSdk 34
+        targetSdk 36
         versionCode $VERSION_CODE
         versionName "$VERSION_NAME"
     }
