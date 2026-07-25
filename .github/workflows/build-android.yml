@@ -1,8 +1,5 @@
 name: Build Android APK & AAB
 
-# Ne zaman çalışır:
-# - main branch'e push olduğunda
-# - Actions sekmesinden manuel "Run workflow" ile de tetiklenebilir
 on:
   push:
     branches: [main]
@@ -11,20 +8,18 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 20   # tüm job en fazla 20dk sürsün, takılırsa otomatik durur
+    timeout-minutes: 25
 
     steps:
       - name: Repo'yu çek
         uses: actions/checkout@v4
 
-      - name: Java (JDK 17) kur — Android build için gerekli
+      - name: Java (JDK 17) kur
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # Android SDK'yı ÖNCEDEN kuruyoruz ki Bubblewrap "SDK indireyim mi?"
-      # diye sormasın — bu, takılmanın en olası sebebiydi.
       - name: Android SDK kur
         uses: android-actions/setup-android@v3
 
@@ -40,47 +35,58 @@ jobs:
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
 
-      # Bubblewrap'in "ilk kurulum" sorularını (JDK/SDK indirsin mi?) HİÇ
-      # sormaması için, kendi global config dosyasını elle önceden yazıyoruz.
-      # Böylece "init" adımına hiç gerek kalmıyor — CLI zaten yapılandırılmış
-      # sayıyor ve doğrudan build'e geçebiliyor.
-      - name: Bubblewrap global config'ini önceden yaz (soruları atla)
+      # 1) init: gerçek Bubblewrap akışını kullanıyoruz (elle klasör kurmuyoruz),
+      #    JDK/SDK zaten kurulu olduğu için o sorular çıkmayacak.
+      #    "n" ile tüm soruları güvenli varsayılanla geçiyoruz.
+      - name: TWA projesini oluştur (init)
+        timeout-minutes: 6
         run: |
-          mkdir -p "$HOME/.bubblewrap"
-          cat > "$HOME/.bubblewrap/config.json" << EOF
-          {
-            "jdkPath": "$JAVA_HOME",
-            "androidSdkPath": "$ANDROID_HOME"
-          }
-          EOF
-          echo "Yazılan config:"
-          cat "$HOME/.bubblewrap/config.json"
+          timeout 300 bash -c '
+            printf "n\nn\nn\nn\nn\nn\nn\nn\nn\nn\n" | bubblewrap init \
+              --manifest="https://nuhkozan.github.io/mindgap/manifest.json" \
+              --directory="./twa-project"
+          ' 2>&1 | tee init.log
+          echo "---- init bitti ----"
 
-      # Proje klasörünü elle kuruyoruz (init'e gerek yok): bizim hazır
-      # twa-manifest.json'ımızı ve keystore'u doğrudan oraya koyuyoruz.
-      - name: TWA proje klasörünü hazırla
+      - name: init.log göster
+        if: always()
+        run: cat init.log || true
+
+      - name: twa-project içeriği
+        if: always()
+        run: ls -la ./twa-project 2>&1 || echo "klasör yok"
+
+      # 2) Bizim elle hazırladığımız twa-manifest.json'ı (doğru signingKey
+      #    ayarlarıyla) init'in ürettiğinin üzerine yazıyoruz.
+      - name: twa-manifest.json'ı proje klasörüne kopyala
         run: |
-          mkdir -p ./twa-project
           cp twa-manifest.json ./twa-project/twa-manifest.json
           cp android.keystore ./twa-project/android.keystore
-          echo "Proje klasörü içeriği:"
-          ls -la ./twa-project
 
+      # 3) build: resmi ortam değişkenleri BUBBLEWRAP_KEYSTORE_PASSWORD ve
+      #    BUBBLEWRAP_KEY_PASSWORD kullanılıyor (Bubblewrap dokümantasyonuna göre).
+      #    "n" cevabı: "checksum uyuşmuyor, yeniden oluşturayım mı?" sorusuna
+      #    HAYIR diyoruz — çünkü manifest'i biz kasıtlı olarak değiştirdik,
+      #    projeyi yeniden oluşturmasın, olduğu gibi build etsin istiyoruz.
       - name: TWA'yı build et (APK + AAB üret)
         timeout-minutes: 10
         working-directory: ./twa-project
         env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          timeout 480 bash -c '
-            yes "" | bubblewrap build --skipPwaValidation
+          timeout 540 bash -c '
+            printf "n\nn\nn\nn\nn\n" | bubblewrap build --skipPwaValidation
           ' 2>&1 | tee ../build.log
-          echo "---- build adımı bitti (exit: $?) ----"
+          echo "---- build bitti ----"
 
-      - name: build.log içeriğini göster (hata ayıklama için)
+      - name: build.log göster
         if: always()
-        run: cat build.log || echo "build.log bulunamadı"
+        run: cat build.log || true
+
+      - name: twa-project TÜM dosyaları listele (derin arama)
+        if: always()
+        run: find ./twa-project -type f \( -name "*.apk" -o -name "*.aab" \) 2>&1 || echo "hiçbir apk/aab yok"
 
       - name: APK ve AAB dosyalarını bul
         id: find_files
@@ -103,15 +109,3 @@ jobs:
         with:
           name: mindgap-aab
           path: ${{ steps.find_files.outputs.aab_path }}
-
-      - name: GitHub Release oluştur (opsiyonel)
-        if: github.ref == 'refs/heads/main' && steps.find_files.outputs.apk_path != ''
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: build-${{ github.run_number }}
-          name: "MIND GAP build #${{ github.run_number }}"
-          files: |
-            ${{ steps.find_files.outputs.apk_path }}
-            ${{ steps.find_files.outputs.aab_path }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
