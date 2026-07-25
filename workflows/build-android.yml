@@ -1,1 +1,84 @@
+name: Build Android APK & AAB
 
+# Ne zaman çalışır:
+# - main branch'e push olduğunda (istersen aşağıdaki 'paths' filtresiyle
+#   sadece belirli dosyalar değiştiğinde tetiklenmesini sağlayabilirsin)
+# - Actions sekmesinden manuel "Run workflow" ile de tetiklenebilir
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repo'yu çek
+        uses: actions/checkout@v4
+
+      - name: Java (JDK 17) kur — Android build için gerekli
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Bubblewrap CLI kur
+        run: npm install -g @bubblewrap/cli
+
+      - name: Android SDK / Studio bağımlılıklarını kur (Bubblewrap ilk kurulum)
+        run: |
+          bubblewrap doctor || true
+
+      # ── İmzalama anahtarı (keystore) ──
+      # Bu, APK/AAB'yi imzalamak için gerekli. İlk seferde bir keystore
+      # üretip GitHub repo secrets'a base64 olarak kaydetmen gerekiyor.
+      # Detaylı talimat mesajın altında.
+      - name: Keystore'u geri yükle
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
+
+      - name: TWA projesini oluştur (twa-manifest.json'dan)
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          bubblewrap build \
+            --skipPwaValidation \
+            2>&1 | tee build.log
+
+      - name: APK ve AAB dosyalarını bul
+        id: find_files
+        run: |
+          echo "apk_path=$(find . -name '*.apk' | head -n1)" >> "$GITHUB_OUTPUT"
+          echo "aab_path=$(find . -name '*.aab' | head -n1)" >> "$GITHUB_OUTPUT"
+
+      - name: Artifact olarak yükle (APK)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mindgap-apk
+          path: ${{ steps.find_files.outputs.apk_path }}
+
+      - name: Artifact olarak yükle (AAB)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mindgap-aab
+          path: ${{ steps.find_files.outputs.aab_path }}
+
+      # İsteğe bağlı: her başarılı build'i otomatik bir GitHub Release'e ekle
+      - name: GitHub Release oluştur (opsiyonel)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "MIND GAP build #${{ github.run_number }}"
+          files: |
+            ${{ steps.find_files.outputs.apk_path }}
+            ${{ steps.find_files.outputs.aab_path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
