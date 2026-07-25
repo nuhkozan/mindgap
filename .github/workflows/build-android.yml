@@ -40,46 +40,43 @@ jobs:
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
 
-      # ANDROID_HOME zaten setup-android action'ı tarafından ayarlanıyor,
-      # bu yüzden Bubblewrap "SDK nerede?" diye sormayacak.
-      - name: TWA projesini oluştur (init)
-        timeout-minutes: 8
+      # Bubblewrap'in "ilk kurulum" sorularını (JDK/SDK indirsin mi?) HİÇ
+      # sormaması için, kendi global config dosyasını elle önceden yazıyoruz.
+      # Böylece "init" adımına hiç gerek kalmıyor — CLI zaten yapılandırılmış
+      # sayıyor ve doğrudan build'e geçebiliyor.
+      - name: Bubblewrap global config'ini önceden yaz (soruları atla)
         run: |
-          echo "JAVA_HOME=$JAVA_HOME"
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          yes "n" | bubblewrap init \
-            --manifest="https://nuhkozan.github.io/mindgap/manifest.json" \
-            --directory="./twa-project" \
-            --jdkPath="$JAVA_HOME" \
-            --androidSdkPath="$ANDROID_HOME" \
-            2>&1 | tee init.log
-          echo "---- init tamamlandı ----"
+          mkdir -p "$HOME/.bubblewrap"
+          cat > "$HOME/.bubblewrap/config.json" << EOF
+          {
+            "jdkPath": "$JAVA_HOME",
+            "androidSdkPath": "$ANDROID_HOME"
+          }
+          EOF
+          echo "Yazılan config:"
+          cat "$HOME/.bubblewrap/config.json"
 
-      - name: init.log içeriğini göster (hata ayıklama için)
-        if: always()
-        run: cat init.log || echo "init.log bulunamadı"
-
-      - name: twa-project klasörünü listele (hata ayıklama için)
-        if: always()
-        run: ls -la ./twa-project || echo "twa-project klasörü oluşmamış"
-
-      - name: twa-manifest.json'ı proje klasörüne kopyala
-        run: cp twa-manifest.json ./twa-project/twa-manifest.json
-
-      - name: keystore'u proje klasörüne kopyala
-        run: cp android.keystore ./twa-project/android.keystore
+      # Proje klasörünü elle kuruyoruz (init'e gerek yok): bizim hazır
+      # twa-manifest.json'ımızı ve keystore'u doğrudan oraya koyuyoruz.
+      - name: TWA proje klasörünü hazırla
+        run: |
+          mkdir -p ./twa-project
+          cp twa-manifest.json ./twa-project/twa-manifest.json
+          cp android.keystore ./twa-project/android.keystore
+          echo "Proje klasörü içeriği:"
+          ls -la ./twa-project
 
       - name: TWA'yı build et (APK + AAB üret)
-        timeout-minutes: 8
+        timeout-minutes: 10
         working-directory: ./twa-project
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          yes "n" | bubblewrap build \
-            --skipPwaValidation \
-            2>&1 | tee ../build.log
+          timeout 480 bash -c '
+            yes "" | bubblewrap build --skipPwaValidation
+          ' 2>&1 | tee ../build.log
+          echo "---- build adımı bitti (exit: $?) ----"
 
       - name: build.log içeriğini göster (hata ayıklama için)
         if: always()
