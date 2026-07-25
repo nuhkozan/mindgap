@@ -28,65 +28,68 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Bubblewrap CLI kur
+      - name: node-pty için build araçlarını kur (native derleme ihtiyacı olursa)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential python3
+
+      - name: Bubblewrap CLI kur (global)
         run: npm install -g @bubblewrap/cli
+
+      - name: PTY otomasyon scripti bağımlılıklarını kur
+        working-directory: .github/scripts
+        run: npm install
 
       - name: Keystore'u geri yükle
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
 
-      # 1) init: gerçek Bubblewrap akışını kullanıyoruz (elle klasör kurmuyoruz),
-      #    JDK/SDK zaten kurulu olduğu için o sorular çıkmayacak.
-      #    "n" ile tüm soruları güvenli varsayılanla geçiyoruz.
-      - name: TWA projesini oluştur (init)
-        timeout-minutes: 6
+      # ── PTY üzerinden bubblewrap init ──
+      # Gerçek bir pseudo-terminal simüle ederek Bubblewrap'in interaktif
+      # sorularını çıktıyı canlı izleyip doğru cevaplarla geçiyoruz.
+      # Bu, "yes |" / "printf |" pipe yaklaşımının TTY olmaması yüzünden
+      # yaşadığımız tutarsız/sonsuz-döngü sorunlarını çözüyor.
+      - name: TWA projesini oluştur (init, PTY ile)
+        timeout-minutes: 10
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
         run: |
-          timeout 300 bash -c '
-            printf "n\nn\nn\nn\nn\nn\nn\nn\nn\nn\n" | bubblewrap init \
-              --manifest="https://nuhkozan.github.io/mindgap/manifest.json" \
-              --directory="./twa-project"
-          ' 2>&1 | tee init.log
-          echo "---- init bitti ----"
+          node .github/scripts/run-bubblewrap.js \
+            "bubblewrap init --manifest=\"https://nuhkozan.github.io/mindgap/manifest.json\" --directory=\"./twa-project\"" \
+            "$(pwd)" \
+            2>&1 | tee init.log
+          echo "==== init.log sonu ===="
 
-      - name: init.log göster
+      - name: twa-project içeriği (hata ayıklama)
         if: always()
-        run: cat init.log || true
+        run: ls -la ./twa-project 2>&1 || echo "twa-project klasörü oluşmamış"
 
-      - name: twa-project içeriği
-        if: always()
-        run: ls -la ./twa-project 2>&1 || echo "klasör yok"
-
-      # 2) Bizim elle hazırladığımız twa-manifest.json'ı (doğru signingKey
-      #    ayarlarıyla) init'in ürettiğinin üzerine yazıyoruz.
-      - name: twa-manifest.json'ı proje klasörüne kopyala
+      # Bizim elle hazırladığımız twa-manifest.json'ı (doğru signingKey
+      # ayarlarıyla) init'in ürettiğinin üzerine yazıyoruz.
+      - name: twa-manifest.json ve keystore'u proje klasörüne kopyala
         run: |
           cp twa-manifest.json ./twa-project/twa-manifest.json
           cp android.keystore ./twa-project/android.keystore
 
-      # 3) build: resmi ortam değişkenleri BUBBLEWRAP_KEYSTORE_PASSWORD ve
-      #    BUBBLEWRAP_KEY_PASSWORD kullanılıyor (Bubblewrap dokümantasyonuna göre).
-      #    "n" cevabı: "checksum uyuşmuyor, yeniden oluşturayım mı?" sorusuna
-      #    HAYIR diyoruz — çünkü manifest'i biz kasıtlı olarak değiştirdik,
-      #    projeyi yeniden oluşturmasın, olduğu gibi build etsin istiyoruz.
-      - name: TWA'yı build et (APK + AAB üret)
+      # ── PTY üzerinden bubblewrap build ──
+      - name: TWA'yı build et (APK + AAB üret, PTY ile)
         timeout-minutes: 10
-        working-directory: ./twa-project
         env:
           BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          timeout 540 bash -c '
-            printf "n\nn\nn\nn\nn\n" | bubblewrap build --skipPwaValidation
-          ' 2>&1 | tee ../build.log
-          echo "---- build bitti ----"
+          node .github/scripts/run-bubblewrap.js \
+            "bubblewrap build --skipPwaValidation" \
+            "$(pwd)/twa-project" \
+            2>&1 | tee build.log
+          echo "==== build.log sonu ===="
 
       - name: build.log göster
         if: always()
         run: cat build.log || true
 
-      - name: twa-project TÜM dosyaları listele (derin arama)
+      - name: twa-project TÜM apk/aab dosyaları (derin arama)
         if: always()
-        run: find ./twa-project -type f \( -name "*.apk" -o -name "*.aab" \) 2>&1 || echo "hiçbir apk/aab yok"
+        run: find ./twa-project -type f \( -name "*.apk" -o -name "*.aab" \) 2>&1 || echo "hiç apk/aab yok"
 
       - name: APK ve AAB dosyalarını bul
         id: find_files
