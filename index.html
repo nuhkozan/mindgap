@@ -376,6 +376,7 @@ const db = firebase.firestore();
   <button class="menuBtn" id="mmLevelMap">🗺️ <span id="mmLevelMapTxt">Level Map</span></button>
   <button class="menuBtn" id="mmChamp">🏆 <span id="mmChampTxt">Champions League</span></button>
   <button class="menuBtn" id="mmRules">📜 <span id="mmRulesTxt">How to Play</span></button>
+  <button class="menuBtn" id="mmPrivacy" style="display:none">🔒 <span id="mmPrivacyTxt">Privacy Options</span></button>
   <select id="langSel" class="menuBtn" style="text-align:center;appearance:auto;width:min(78vw,300px)">
     <option value="en">🇬🇧 English</option>
     <option value="tr">🇹🇷 Türkçe</option>
@@ -2318,7 +2319,7 @@ async function playRankShiftAnimation(oldEntries, oldRank){
 // ═══════════════════════════════════════════════════════
 const I18N={
   en:{
-    play:'Play', champ:'Champions League', rules:'How to Play', levelMap:'Level Map', streakDays:'day streak',
+    play:'Play', champ:'Champions League', rules:'How to Play', levelMap:'Level Map', streakDays:'day streak', privacyOptions:'Privacy Options',
     sub:'Brain Blocks • 255 Levels',
     rulesTitle:'📜 How to Play',
     rulesBody:`<b>Goal:</b> Place all pieces so only the <b>target (red) cell</b> stays empty.<br><br>
@@ -2336,7 +2337,7 @@ const I18N={
     score:'Score', bonusHint:'Bonus hint earned!', newUser:'👤 New Username', newGame:'🆕 New Game', continueGame:'▶️ Continue', welcomeBack:'Welcome back', alreadySolved:'Already solved — no points', demoTitle:'Tutorial', demoSub:'Watch how the game works', skipTutorial:'Skip Tutorial', demoWelcome:'👋 Welcome! Let\'s see how it works...', demoDrag:'👆 Hold & drag the piece onto the board', demoComplete:'✅ That\'s it! Now try it yourself'
   },
   tr:{
-    play:'Oyna', champ:'Şampiyonlar Ligi', rules:'Oyun Kuralları', levelMap:'Bölüm Haritası', streakDays:'gün seri',
+    play:'Oyna', champ:'Şampiyonlar Ligi', rules:'Oyun Kuralları', levelMap:'Bölüm Haritası', streakDays:'gün seri', privacyOptions:'Gizlilik Tercihleri',
     sub:'Zeka Blokları • 255 Bölüm',
     rulesTitle:'📜 Oyun Kuralları',
     rulesBody:`<b>Amaç:</b> Tüm parçaları tahtaya yerleştir; sadece <b>hedef (kırmızı) kare</b> boş kalsın.<br><br>
@@ -2354,7 +2355,7 @@ const I18N={
     score:'Puan', bonusHint:'Bonus ipucu kazandın!', newUser:'👤 Yeni Kullanıcı Adı', newGame:'🆕 Yeni Oyun', continueGame:'▶️ Devam Et', welcomeBack:'Tekrar hoş geldin', alreadySolved:'Zaten çözülmüş — puan yok', demoTitle:'Tanıtım', demoSub:'Oyunun nasıl oynandığını izle', skipTutorial:'Tanıtımı Geç', demoWelcome:'👋 Hoş geldin! Nasıl oynandığına bakalım...', demoDrag:'👆 Parçayı basılı tutup tahtaya sürükle', demoComplete:'✅ İşte bu kadar! Şimdi sıra sende'
   },
   es:{
-    play:'Jugar', champ:'Liga de Campeones', rules:'Cómo Jugar', levelMap:'Mapa de Niveles', streakDays:'días seguidos',
+    play:'Jugar', champ:'Liga de Campeones', rules:'Cómo Jugar', levelMap:'Mapa de Niveles', streakDays:'días seguidos', privacyOptions:'Opciones de Privacidad',
     sub:'Bloques Mentales • 255 Niveles',
     rulesTitle:'📜 Cómo Jugar',
     rulesBody:`<b>Objetivo:</b> Coloca todas las piezas; solo la <b>casilla objetivo (roja)</b> debe quedar vacía.<br><br>
@@ -2372,7 +2373,7 @@ const I18N={
     score:'Puntos', bonusHint:'¡Pista extra ganada!', newUser:'👤 Nuevo Usuario', newGame:'🆕 Nuevo Juego', continueGame:'▶️ Continuar', welcomeBack:'Bienvenido de nuevo', alreadySolved:'Ya resuelto — sin puntos', demoTitle:'Tutorial', demoSub:'Mira cómo funciona el juego', skipTutorial:'Omitir Tutorial', demoWelcome:'👋 ¡Bienvenido! Veamos cómo funciona...', demoDrag:'👆 Mantén y arrastra la pieza al tablero', demoComplete:'✅ ¡Eso es todo! Ahora inténtalo tú'
   },
   ar:{
-    play:'العب', champ:'دوري الأبطال', rules:'كيفية اللعب', levelMap:'خريطة المراحل', streakDays:'أيام متتالية',
+    play:'العب', champ:'دوري الأبطال', rules:'كيفية اللعب', levelMap:'خريطة المراحل', streakDays:'أيام متتالية', privacyOptions:'خيارات الخصوصية',
     sub:'مكعبات الذكاء • 255 مرحلة',
     rulesTitle:'📜 كيفية اللعب',
     rulesBody:`<b>الهدف:</b> ضع كل القطع بحيث تبقى <b>الخانة الهدف (الحمراء)</b> فقط فارغة.<br><br>
@@ -2390,7 +2391,7 @@ const I18N={
     score:'النقاط', bonusHint:'حصلت على تلميح إضافي!', newUser:'👤 اسم مستخدم جديد', newGame:'🆕 لعبة جديدة', continueGame:'▶️ متابعة', welcomeBack:'مرحباً بعودتك', alreadySolved:'تم حلها مسبقاً — بلا نقاط', demoTitle:'تعليمي', demoSub:'شاهد كيف تعمل اللعبة', skipTutorial:'تخطي الشرح', demoWelcome:'👋 مرحباً! لنرَ كيف تعمل...', demoDrag:'👆 اضغط مطولاً واسحب القطعة إلى اللوحة', demoComplete:'✅ هذا كل شيء! الآن جرّب بنفسك'
   },
   ru:{
-    play:'Играть', champ:'Лига Чемпионов', rules:'Как играть', levelMap:'Карта уровней', streakDays:'дней подряд',
+    play:'Играть', champ:'Лига Чемпионов', rules:'Как играть', levelMap:'Карта уровней', streakDays:'дней подряд', privacyOptions:'Настройки конфиденциальности',
     sub:'Умные Блоки • 255 уровней',
     rulesTitle:'📜 Как играть',
     rulesBody:`<b>Цель:</b> Разместите все фигуры так, чтобы пустой осталась только <b>целевая (красная) клетка</b>.<br><br>
@@ -2420,6 +2421,7 @@ function applyLang(){
   document.getElementById('mmLevelMapTxt').textContent=T('levelMap');
   document.getElementById('mapTitle').textContent='🗺️ '+T('levelMap');
   document.getElementById('mmRulesTxt').textContent=T('rules');
+  document.getElementById('mmPrivacyTxt').textContent=T('privacyOptions');
   document.getElementById('mmSub').textContent=T('sub');
   document.getElementById('rulesTitle').innerHTML=T('rulesTitle');
   document.getElementById('rulesBody').innerHTML=T('rulesBody');
@@ -2453,6 +2455,18 @@ function refreshMenuButtons(){
   const mu=document.getElementById('menuUserRow');
   mu.textContent=hasUser?(T('welcomeBack')+', '+USERNAME+'! 🧠 IQ '+iqFor(MAX_LEVEL)+' • '+titleFor(MAX_LEVEL)+' • ⭐ '+SCORE):'';
   updateStreakUI();
+
+  // GDPR/UMP: gizlilik tercihleri butonu sadece native köprü bunu gerektiriyorsa görünür.
+  const privacyBtn=document.getElementById('mmPrivacy');
+  try{
+    if(window.AndroidBridge && typeof window.AndroidBridge.isPrivacyOptionsRequired==='function'){
+      privacyBtn.style.display=window.AndroidBridge.isPrivacyOptionsRequired()?'flex':'none';
+    } else {
+      privacyBtn.style.display='none';
+    }
+  }catch(e){
+    privacyBtn.style.display='none';
+  }
 }
 
 document.getElementById('mmNewUser').onclick=async()=>{
@@ -2480,6 +2494,11 @@ document.getElementById('soundToggleBtn').onclick=toggleSound;
 document.getElementById('hapticToggleBtn').onclick=toggleHaptic;
 document.getElementById('mmRules').onclick=()=>{
   document.getElementById('rulesModal').classList.add('show');
+};
+document.getElementById('mmPrivacy').onclick=()=>{
+  if(window.AndroidBridge && typeof window.AndroidBridge.showPrivacyOptionsForm==='function'){
+    window.AndroidBridge.showPrivacyOptionsForm();
+  }
 };
 document.getElementById('rulesCloseBtn').onclick=()=>{
   document.getElementById('rulesModal').classList.remove('show');
