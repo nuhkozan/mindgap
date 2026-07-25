@@ -31,32 +31,56 @@ jobs:
       - name: Bubblewrap CLI kur
         run: npm install -g @bubblewrap/cli
 
-      - name: Android SDK / Studio bağımlılıklarını kur (Bubblewrap ilk kurulum)
-        run: |
-          bubblewrap doctor || true
-
       # ── İmzalama anahtarı (keystore) ──
       # Bu, APK/AAB'yi imzalamak için gerekli. İlk seferde bir keystore
       # üretip GitHub repo secrets'a base64 olarak kaydetmen gerekiyor.
-      # Detaylı talimat mesajın altında.
       - name: Keystore'u geri yükle
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
 
-      - name: TWA projesini oluştur (twa-manifest.json'dan)
+      # Bubblewrap'in normal akışı: önce "init" ile web manifest'ten bir TWA
+      # projesi oluşturulur (bu adım JDK/Android SDK kurulumu sorar — CI'da
+      # interaktif soruya cevap veremeyeceğimiz için "yes" ile otomatik
+      # "evet" besliyoruz), sonra o proje klasöründe "build" çalıştırılır.
+      - name: TWA projesini oluştur (init)
+        run: |
+          yes | bubblewrap init \
+            --manifest="https://nuhkozan.github.io/mindgap/manifest.json" \
+            --directory="./twa-project" \
+            2>&1 | tee init.log
+        continue-on-error: true
+
+      - name: init.log içeriğini göster (hata ayıklama için)
+        run: cat init.log
+
+      - name: twa-manifest.json'ı proje klasörüne kopyala
+        run: |
+          cp twa-manifest.json ./twa-project/twa-manifest.json
+
+      - name: keystore'u proje klasörüne kopyala
+        run: |
+          cp android.keystore ./twa-project/android.keystore
+
+      - name: TWA'yı build et (APK + AAB üret)
+        working-directory: ./twa-project
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          bubblewrap build \
+          yes | bubblewrap build \
             --skipPwaValidation \
-            2>&1 | tee build.log
+            2>&1 | tee ../build.log
+
+      - name: build.log içeriğini göster (hata ayıklama için)
+        run: cat build.log
 
       - name: APK ve AAB dosyalarını bul
         id: find_files
         run: |
-          echo "apk_path=$(find . -name '*.apk' | head -n1)" >> "$GITHUB_OUTPUT"
-          echo "aab_path=$(find . -name '*.aab' | head -n1)" >> "$GITHUB_OUTPUT"
+          echo "apk_path=$(find ./twa-project -name '*.apk' | head -n1)" >> "$GITHUB_OUTPUT"
+          echo "aab_path=$(find ./twa-project -name '*.aab' | head -n1)" >> "$GITHUB_OUTPUT"
+          echo "Bulunan APK: $(find ./twa-project -name '*.apk')"
+          echo "Bulunan AAB: $(find ./twa-project -name '*.aab')"
 
       - name: Artifact olarak yükle (APK)
         uses: actions/upload-artifact@v4
