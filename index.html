@@ -1051,6 +1051,17 @@ async function checkWin(){
   const all=Object.values(pieces);
   const placed=all.filter(p=>p.onBoard).length;
   if(placed<all.length){statusEl.textContent='';return;}
+
+  // Güvenlik ağı: boardMap'i gerçek parça konumlarından yeniden inşa et.
+  // Böylece herhangi bir yerleştirme akışında (ör. İpucu, reklamla çözüm)
+  // oluşabilecek senkron kayması, kazanma kontrolünü asla yanlış
+  // etkilemez — "tüm parçalar tahtada ama bölüm bitmiyor" durumuna karşı.
+  Object.keys(boardMap).forEach(k=>delete boardMap[k]);
+  all.forEach(p=>{
+    if(!p.onBoard) return;
+    p.cells.forEach(([dr,dc])=>{ boardMap[`${p.gridR+dr},${p.gridC+dc}`]=p.id; });
+  });
+
   const empty=GRID*GRID-Object.keys(boardMap).length;
   if(empty!==1){
     statusEl.textContent=`${empty} ${T('empty')}`;
@@ -1273,6 +1284,13 @@ function computeSolution(){
 function solveAll(){
   const sol=computeSolution();
   if(!sol) return false;
+  // ÖNEMLİ: önce TÜM parçaları eski (mevcut) şekilleriyle tahtadan kaldır,
+  // SONRA yeni çözüm şekline geçir. Sırayı tersine çevirmek (önce cells'i
+  // değiştirip sonra kaldırmaya çalışmak) yanlış anahtarlarla silme yapıp
+  // tahtada "hayalet" kayıtlar bırakıyordu — bu da bazen iki parçanın aynı
+  // hücrede üst üste görünmesine ya da bir hücrenin yanlışlıkla dolu/boş
+  // sayılmasına yol açıyordu.
+  Object.values(pieces).forEach(p=>{ if(p.onBoard) lift(p); });
   Object.keys(sol).forEach(id=>{
     const p=pieces[id];
     const s=sol[id];
@@ -1496,10 +1514,19 @@ document.getElementById('hintBtn').onclick=()=>{
   if(solveAll()){
     // Her basışta SADECE 1 parça yerleştir
     const target=Object.values(pieces).find(p=>!before[p.id].onBoard);
+    // 1. adım: hedef dışındaki TÜM parçaları önce tahtadan kaldır (çözüm
+    // konumlarından). Bunu tek tek "kaldır sonra hemen geri koy" şeklinde
+    // yapmak, henüz sırası gelmemiş bir parçanın çözüm-konumunun, geri
+    // yüklenmeye çalışılan başka bir parçayı yanlışlıkla "dolu" göstermesine
+    // (ve bu yüzden o parçanın tahtadan düşüp kaybolmasına) yol açıyordu.
+    Object.values(pieces).forEach(p=>{
+      if(target&&p.id===target.id) return;
+      lift(p);
+    });
+    // 2. adım: şimdi hepsini güvenle eski (bulmaca öncesi) konum/şekline döndür.
     Object.values(pieces).forEach(p=>{
       if(target&&p.id===target.id) return;
       const b=before[p.id];
-      lift(p);
       p.ori=b.ori;p.cells=b.cells;
       if(b.onBoard&&canPlace(p.cells,b.r,b.c,p.id)) place(p,b.r,b.c);
     });
