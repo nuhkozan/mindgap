@@ -876,12 +876,12 @@ function attachBoxEvents(box,p){
 // DÖNDÜRME  (8 duruş: 4 rot + 4 flip-rot)
 // ═══════════════════════════════════════════════════════
 let toastTimer=null;
-function showToast(msg){
+function showToast(msg,durationMs){
   const t=document.getElementById('toast');
   t.textContent=msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>t.classList.remove('show'),900);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),durationMs||900);
 }
 
 function doRotate(p){
@@ -1625,7 +1625,7 @@ document.getElementById('solveBtn').onclick=()=>{
       if(adAlreadyHandled) return;
       adAlreadyHandled=true;
       endAdSession();
-      showToast(T('adTimeoutFallback'));
+      showToast(T('adTimeoutFallback')+(lastAdDebugMsg?' — '+lastAdDebugMsg:''),4000);
       solveAfterAd();
     }, 10000);
 
@@ -1662,19 +1662,22 @@ document.getElementById('solveBtn').onclick=()=>{
 
 // Native (Android) taraftan reklam bittiğinde çağrılan global callback'ler.
 // MainActivity.java bunları webView.evaluateJavascript(...) ile tetikler.
+let lastAdDebugMsg='';
 window.onRewardEarned=function(){
   if(adAlreadyHandled){ endAdSession(); return; } // zaman aşımıyla zaten çözülmüş, geç kalan ödül
   adAlreadyHandled=true;
   endAdSession();
   solveAfterAd();
 };
-window.onRewardedAdFailed=function(){
-  if(!adSessionActive){ adInProgress=false; showToast(T('adFailed')); }
+window.onRewardedAdFailed=function(msg){
+  if(msg) lastAdDebugMsg=msg;
+  if(!adSessionActive){ adInProgress=false; showToast(T('adFailed')+(msg?' ('+msg+')':'')); }
   // adSessionActive true ise: 10 saniyelik deneme döngüsü zaten devam ediyor,
   // her başarısız denemede ayrı bir uyarı göstermiyoruz.
 };
-window.onRewardedAdNotReady=function(){
-  if(!adSessionActive){ adInProgress=false; showToast(T('adNotReady')); }
+window.onRewardedAdNotReady=function(msg){
+  if(msg) lastAdDebugMsg=msg;
+  if(!adSessionActive){ adInProgress=false; showToast(T('adNotReady')+(msg?' ('+msg+')':'')); }
 };
 
 document.getElementById('adCloseBtn').onclick=()=>{
