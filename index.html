@@ -22,18 +22,18 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
   color:#e0f0ff;font-family:'Trebuchet MS',sans-serif;touch-action:none}
 body{display:flex;flex-direction:column;align-items:center;height:100dvh;padding:5px 4px 3px;gap:2px}
 
-.topbar{flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;width:100%}
-#iqBadge{font-size:clamp(.95rem,4vw,1.15rem);font-weight:700;color:#00e8ff;
-  letter-spacing:.04em;text-shadow:0 0 10px #00e8ff;
+.topbar{flex-shrink:0;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:7px;width:100%;row-gap:6px}
+#iqBadge{font-size:clamp(.78rem,3.3vw,.95rem);font-weight:700;color:#00e8ff;
+  letter-spacing:.03em;text-shadow:0 0 10px #00e8ff;
   background:rgba(0,220,255,.08);border:1px solid rgba(0,220,255,.35);
-  border-radius:999px;padding:4px 14px}
-#scoreBadge{font-size:clamp(.95rem,4vw,1.15rem);font-weight:700;color:#ffd040;
-  letter-spacing:.04em;text-shadow:0 0 10px rgba(255,200,60,.7);
+  border-radius:999px;padding:4px 11px}
+#scoreBadge{font-size:clamp(.78rem,3.3vw,.95rem);font-weight:700;color:#ffd040;
+  letter-spacing:.03em;text-shadow:0 0 10px rgba(255,200,60,.7);
   background:rgba(255,200,60,.08);border:1px solid rgba(255,200,60,.35);
-  border-radius:999px;padding:4px 14px}
-#lvlBadge{font-size:clamp(.88rem,3.6vw,1.05rem);font-weight:700;color:#ffd040;
+  border-radius:999px;padding:4px 11px}
+#lvlBadge{font-size:clamp(.74rem,3vw,.88rem);font-weight:700;color:#ffd040;
   text-shadow:0 0 8px rgba(255,200,60,.7);background:rgba(255,200,60,.08);
-  border:1px solid rgba(255,200,60,.3);border-radius:999px;padding:4px 14px}
+  border:1px solid rgba(255,200,60,.3);border-radius:999px;padding:4px 11px}
 #offlineBadge{font-size:clamp(.8rem,3.2vw,.95rem);color:#ff8a4a;
   background:rgba(255,120,50,.1);border:1px solid rgba(255,120,50,.4);
   border-radius:999px;padding:4px 12px;animation:offlinePulse 2s ease-in-out infinite}
@@ -232,12 +232,11 @@ button:disabled{opacity:.35;cursor:default}
 .lbRow .name{flex:1;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lbRow .title{color:#ffd040;font-size:.85em}
 .lbRow .score{font-weight:800;color:#00ffcc}
-#userTag{display:inline-flex;align-items:center;gap:6px;font-size:clamp(.85rem,3.6vw,1.05rem);
-  color:#ffe27a;text-align:center;flex-shrink:0;margin:2px auto 0;font-weight:800;
+#userTag{display:inline-flex;align-items:center;gap:6px;font-size:clamp(.72rem,3vw,.9rem);
+  color:#ffe27a;text-align:center;flex-shrink:0;font-weight:800;
   letter-spacing:.02em;background:linear-gradient(135deg,rgba(255,200,60,.16),rgba(255,140,0,.10));
-  border:1px solid rgba(255,200,60,.55);border-radius:999px;padding:5px 16px;
-  text-shadow:0 0 10px rgba(255,200,60,.8);box-shadow:0 0 14px rgba(255,180,40,.25);
-  width:fit-content}
+  border:1px solid rgba(255,200,60,.55);border-radius:999px;padding:4px 12px;
+  text-shadow:0 0 10px rgba(255,200,60,.8);box-shadow:0 0 14px rgba(255,180,40,.25)}
 
 
 
@@ -329,18 +328,18 @@ const db = firebase.firestore();
 <body>
 
 <div class="topbar">
+  <span id="userTag"></span>
   <span id="iqBadge">🧠 IQ: 80</span>
   <span id="scoreBadge">⭐ 0</span>
   <span id="lvlBadge">Bölüm 1</span>
   <span id="offlineBadge" style="display:none">📡</span>
 </div>
-<p id="userTag"></p>
-<p class="sub" id="subTxt">Hedef: <b>1</b> numaralı kare boş kalsın &nbsp;|&nbsp; Dokun → döndür &nbsp;|&nbsp; Sürükle → yerleştir</p>
 
 <div id="bwrap"><div id="board">
   <canvas id="gc"></canvas>
   <canvas id="pc" style="position:absolute;left:0;top:0"></canvas>
 </div></div>
+<p class="sub" id="subTxt">Hedef: <b>1</b> numaralı kare boş kalsın &nbsp;|&nbsp; Dokun → döndür &nbsp;|&nbsp; Sürükle → yerleştir</p>
 
 <div id="status"></div>
 <div id="tray"></div>
