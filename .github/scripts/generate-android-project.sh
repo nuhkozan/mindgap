@@ -225,8 +225,8 @@ import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.MobileAds;
 import com.google.android.gms.ads.OnUserEarnedRewardListener;
 import com.google.android.gms.ads.rewarded.RewardItem;
-import com.google.android.gms.ads.rewarded.RewardedAd;
-import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
+import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAd;
+import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAdLoadCallback;
 
 import com.google.android.ump.ConsentInformation;
 import com.google.android.ump.ConsentRequestParameters;
@@ -253,7 +253,7 @@ import com.google.android.ump.UserMessagingPlatform;
 public class MainActivity extends Activity {
 
     private WebView webView;
-    private RewardedAd rewardedAd;
+    private RewardedInterstitialAd rewardedAd;
     private boolean adIsLoading = false;
     private boolean isMobileAdsInitialized = false;
     private ConsentInformation consentInformation;
@@ -345,10 +345,10 @@ public class MainActivity extends Activity {
         if (adIsLoading || rewardedAd != null) return;
         adIsLoading = true;
         AdRequest adRequest = new AdRequest.Builder().build();
-        RewardedAd.load(this, getString(R.string.admob_rewarded_ad_unit_id), adRequest,
-                new RewardedAdLoadCallback() {
+        RewardedInterstitialAd.load(this, getString(R.string.admob_rewarded_ad_unit_id), adRequest,
+                new RewardedInterstitialAdLoadCallback() {
                     @Override
-                    public void onAdLoaded(RewardedAd ad) {
+                    public void onAdLoaded(RewardedInterstitialAd ad) {
                         rewardedAd = ad;
                         adIsLoading = false;
                         lastAdDebugInfo = "reklam yüklendi, hazır";
