@@ -22,18 +22,18 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
   color:#e0f0ff;font-family:'Trebuchet MS',sans-serif;touch-action:none}
 body{display:flex;flex-direction:column;align-items:center;height:100dvh;padding:5px 4px 3px;gap:2px}
 
-.topbar{flex-shrink:0;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:7px;width:100%;row-gap:6px}
-#iqBadge{font-size:clamp(.78rem,3.3vw,.95rem);font-weight:700;color:#00e8ff;
-  letter-spacing:.03em;text-shadow:0 0 10px #00e8ff;
+.topbar{flex-shrink:0;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:5px;width:100%;row-gap:6px}
+#iqBadge{font-size:clamp(.68rem,3vw,.95rem);font-weight:700;color:#00e8ff;
+  letter-spacing:.02em;text-shadow:0 0 10px #00e8ff;
   background:rgba(0,220,255,.08);border:1px solid rgba(0,220,255,.35);
-  border-radius:999px;padding:4px 11px}
-#scoreBadge{font-size:clamp(.78rem,3.3vw,.95rem);font-weight:700;color:#ffd040;
-  letter-spacing:.03em;text-shadow:0 0 10px rgba(255,200,60,.7);
+  border-radius:999px;padding:4px 9px;white-space:nowrap}
+#scoreBadge{font-size:clamp(.68rem,3vw,.95rem);font-weight:700;color:#ffd040;
+  letter-spacing:.02em;text-shadow:0 0 10px rgba(255,200,60,.7);
   background:rgba(255,200,60,.08);border:1px solid rgba(255,200,60,.35);
-  border-radius:999px;padding:4px 11px}
-#lvlBadge{font-size:clamp(.74rem,3vw,.88rem);font-weight:700;color:#ffd040;
+  border-radius:999px;padding:4px 9px;white-space:nowrap}
+#lvlBadge{font-size:clamp(.66rem,2.8vw,.88rem);font-weight:700;color:#ffd040;
   text-shadow:0 0 8px rgba(255,200,60,.7);background:rgba(255,200,60,.08);
-  border:1px solid rgba(255,200,60,.3);border-radius:999px;padding:4px 11px}
+  border:1px solid rgba(255,200,60,.3);border-radius:999px;padding:4px 9px;white-space:nowrap}
 #offlineBadge{font-size:clamp(.8rem,3.2vw,.95rem);color:#ff8a4a;
   background:rgba(255,120,50,.1);border:1px solid rgba(255,120,50,.4);
   border-radius:999px;padding:4px 12px;animation:offlinePulse 2s ease-in-out infinite}
@@ -232,11 +232,11 @@ button:disabled{opacity:.35;cursor:default}
 .lbRow .name{flex:1;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lbRow .title{color:#ffd040;font-size:.85em}
 .lbRow .score{font-weight:800;color:#00ffcc}
-#userTag{display:inline-flex;align-items:center;gap:6px;font-size:clamp(.72rem,3vw,.9rem);
+#userTag{display:inline-flex;align-items:center;gap:4px;font-size:clamp(.66rem,2.8vw,.88rem);
   color:#ffe27a;text-align:center;flex-shrink:0;font-weight:800;
-  letter-spacing:.02em;background:linear-gradient(135deg,rgba(255,200,60,.16),rgba(255,140,0,.10));
-  border:1px solid rgba(255,200,60,.55);border-radius:999px;padding:4px 12px;
-  text-shadow:0 0 10px rgba(255,200,60,.8);box-shadow:0 0 14px rgba(255,180,40,.25)}
+  letter-spacing:.01em;background:linear-gradient(135deg,rgba(255,200,60,.16),rgba(255,140,0,.10));
+  border:1px solid rgba(255,200,60,.55);border-radius:999px;padding:4px 10px;
+  text-shadow:0 0 10px rgba(255,200,60,.8);box-shadow:0 0 14px rgba(255,180,40,.25);white-space:nowrap}
 
 
 
@@ -657,6 +657,23 @@ if(isNaN(LEVEL)||LEVEL<0||LEVEL>=TOTAL_LEVELS) LEVEL=0;
 let MAX_LEVEL=parseInt(localStorage_get('pz_maxlevel')||'0');
 if(isNaN(MAX_LEVEL)||MAX_LEVEL<LEVEL) MAX_LEVEL=LEVEL;
 
+// EARNED_LEVEL: IQ/puan/ünvan hesaplamasının dayandığı GERÇEK (ödüllendirilen)
+// ilerleme. MAX_LEVEL sadece navigasyon sınırıdır (reklamla atlanan bölümler
+// dahil ilerler — bölüm geçilebilsin diye), ama EARNED_LEVEL sadece normal
+// (reklamsız) ilk çözümlerde ilerler. Var olan oyuncular için migration:
+// bu anahtar daha önce hiç yazılmamışsa MAX_LEVEL ile başlatılır, geriye
+// dönük IQ/ünvan kaybı yaşanmasın diye.
+let EARNED_LEVEL=(()=>{
+  const saved=localStorage_get('pz_earnedlevel');
+  if(saved===null) return MAX_LEVEL;
+  const n=parseInt(saved);
+  return isNaN(n)?MAX_LEVEL:n;
+})();
+
+// Bu bölüm reklam izlenerek (ya da reklam gelmediği için otomatik) mi çözüldü —
+// evetse puan/IQ/ünvan ilerlemesi verilmez. Her yeni bölüm yüklemesinde sıfırlanır.
+let SOLVED_VIA_AD=false;
+
 function localStorage_get(k){ try{return localStorage.getItem(k);}catch(e){return null;} }
 function localStorage_set(k,v){ try{localStorage.setItem(k,v);}catch(e){} }
 
@@ -1046,7 +1063,10 @@ async function checkWin(){
   // her zaman kaydedilir), ama PUAN/IQ/ÜNVAN/SIRALAMA sadece kullanıcı adı
   // TANIMLI ve merkezi storage'a ERİŞİLEBİLİRSE (online) işlenir.
   const isFirstTime=markLevelCompleted(LEVEL); // true = ilk kez çözülüyor
-  if(isFirstTime){ registerStreakProgress(); } // günlük seri — offline'da da çalışır
+  // Reklamla (ya da reklam gelmediği için otomatik) çözülen bölümler bölüm
+  // ilerlemesini/navigasyonu engellemez ama puan/IQ/ünvan KAZANDIRMAZ.
+  const countsForProgress = isFirstTime && !SOLVED_VIA_AD;
+  if(isFirstTime){ registerStreakProgress(); } // günlük seri — reklamla çözülse de sayılır
   if(LEVEL+1>MAX_LEVEL){
     MAX_LEVEL=LEVEL+1;
     localStorage_set('pz_maxlevel',String(MAX_LEVEL));
@@ -1080,12 +1100,18 @@ async function checkWin(){
   }
 
   // ── ONLINE MOD: tam puan/IQ/ünvan/sıralama akışı ──
-  const oldIq=iqFor(MAX_LEVEL-1);
-  const newIq=iqFor(Math.min(MAX_LEVEL,TOTAL_LEVELS-1));
-  const iqGain=isFirstTime ? (newIq-oldIq) : 0;
-  const oldTitle=titleFor(MAX_LEVEL-1);
-  const newTitle=titleFor(MAX_LEVEL);
-  const titleChanged=isFirstTime && newTitle!==oldTitle;
+  // IQ/ünvan EARNED_LEVEL'e dayanır (sadece reklamsız ilk çözümlerde ilerler).
+  const prevEarnedLevel=EARNED_LEVEL;
+  if(countsForProgress && LEVEL+1>EARNED_LEVEL){
+    EARNED_LEVEL=LEVEL+1;
+    localStorage_set('pz_earnedlevel',String(EARNED_LEVEL));
+  }
+  const oldIq=iqFor(prevEarnedLevel);
+  const newIq=iqFor(Math.min(EARNED_LEVEL,TOTAL_LEVELS-1));
+  const iqGain=countsForProgress ? (newIq-oldIq) : 0;
+  const oldTitle=titleFor(prevEarnedLevel);
+  const newTitle=titleFor(EARNED_LEVEL);
+  const titleChanged=countsForProgress && newTitle!==oldTitle;
 
   // Puan eklenmeden ÖNCE mevcut liderlik tablosunu ve eski sırayı yakala
   // (rulet animasyonu için "önce" durumu). Bu adım asla puan/IQ akışını bloklamamalı.
@@ -1095,14 +1121,15 @@ async function checkWin(){
     oldLbRank=rankOf(oldLbEntries,USERNAME);
   }catch(e){ oldLbEntries=[]; oldLbRank=null; }
 
-  // Puan/IQ güncellemesi — her koşulda dener, tek bir adımın hata vermesi
-  // diğerlerini engellemesin diye ayrı try/catch'lerle korunuyor.
-  if(isFirstTime){
+  // Puan/IQ güncellemesi — sadece reklamsız ilk çözümde. Her koşulda dener,
+  // tek bir adımın hata vermesi diğerlerini engellemesin diye ayrı
+  // try/catch'lerle korunuyor.
+  if(countsForProgress){
     try{ await addScore(GRID*10); }catch(e){ console.error('addScore hata:',e); }
   }
-  const gotBonus=isFirstTime && grantBonusHintIfDue();
+  const gotBonus=countsForProgress && grantBonusHintIfDue();
 
-  // ÜNVAN ATLAMA ÖDÜLÜ: +50 bonus puan + 1 kalıcı ekstra ipucu hakkı (sadece ilk çözümde)
+  // ÜNVAN ATLAMA ÖDÜLÜ: +50 bonus puan + 1 kalıcı ekstra ipucu hakkı (sadece reklamsız ilk çözümde)
   let titleBonusScore=0;
   if(titleChanged){
     titleBonusScore=50;
@@ -1111,9 +1138,14 @@ async function checkWin(){
     localStorage_set('pz_bonushints',String(BONUS_HINTS));
   }
 
-  let html = isFirstTime
-    ? '🧠 IQ +'+Math.max(0,iqGain)
-    : '🔁 '+T('alreadySolved');
+  let html;
+  if(countsForProgress){
+    html='🧠 IQ +'+Math.max(0,iqGain);
+  } else if(!isFirstTime){
+    html='🔁 '+T('alreadySolved');
+  } else {
+    html='📺 '+T('adSolvedNoReward');
+  }
   if(gotBonus){
     html+='<br>💡 '+T('bonusHint');
   }
@@ -1130,7 +1162,7 @@ async function checkWin(){
   } else {
     labelTxt.textContent=T('currentTitleLabel');
     document.getElementById('titleUpName').textContent=newTitle;
-    rewardTxt.textContent = isFirstTime ? ('⭐ +'+(GRID*10)) : T('alreadySolved');
+    rewardTxt.textContent = countsForProgress ? ('⭐ +'+(GRID*10)) : (!isFirstTime ? T('alreadySolved') : T('adSolvedNoReward'));
     badge.classList.remove('titleChanged');
     SFX.win(); HAPTICS.win();
   }
@@ -1520,6 +1552,7 @@ function endAdSession(){
 }
 
 function solveAfterAd(){
+  SOLVED_VIA_AD=true;
   solveWithAnimation((success)=>{
     if(success){
       checkWin().catch(e=>console.error('checkWin hata (reklam akışı):',e));
@@ -1634,6 +1667,7 @@ document.getElementById('nextBtn').onclick=()=>{
 // BÖLÜM YÜKLEME
 // ═══════════════════════════════════════════════════════
 function loadLevel(){
+  SOLVED_VIA_AD=false; // her yeni bölümde sıfırlanır
   const info=levelInfo(LEVEL);
   GRID=info.grid;EMPTY_R=info.emptyR;EMPTY_C=info.emptyC;CELL_NUM=info.cellNum;
 
@@ -1655,11 +1689,11 @@ function loadLevel(){
 
   hintUsed=0;
   CURRENT_LEVEL_ALREADY_COMPLETED=COMPLETED_LEVELS.has(LEVEL);
-  const iq=iqFor(MAX_LEVEL);
+  const iq=iqFor(EARNED_LEVEL);
   document.getElementById('iqBadge').textContent=`🧠 IQ: ${iq}`;
   if(typeof updateUserTag==='function'&&USERNAME){updateUserTag();saveScore();}
   if(typeof refreshLevelTexts==='function'){refreshLevelTexts();}
-  else{lvlBadge.textContent=`Bölüm ${LEVEL+1}/${TOTAL_LEVELS}`;}
+  else{lvlBadge.textContent=`🎯 ${LEVEL+1}/${TOTAL_LEVELS}`;}
   statusEl.textContent='';
   winOverlay.classList.remove('show');
   document.getElementById('titleUpBadge').classList.remove('show','titleChanged');
@@ -2016,7 +2050,7 @@ function nameKey(n){return n.toLocaleLowerCase('tr').replace(/[^a-z0-9çğıöş
 // Yeni kullanıcı oluşturulduğunda önceki oyuncunun tüm yerel ilerlemesini sıfırla
 function resetLocalPlayerState(alsoResetDemoFlag){
   const keysToWipe=[
-    'pz_level','pz_maxlevel','pz_score','pz_bonushints',
+    'pz_level','pz_maxlevel','pz_earnedlevel','pz_score','pz_bonushints',
     'pz_levelssincebonus','pz_completed'
   ];
   if(alsoResetDemoFlag) keysToWipe.push('pz_demo_done');
@@ -2024,6 +2058,7 @@ function resetLocalPlayerState(alsoResetDemoFlag){
 
   LEVEL=0;
   MAX_LEVEL=0;
+  EARNED_LEVEL=0;
   SCORE=0;
   BONUS_HINTS=0;
   levelsSinceBonus=0;
@@ -2063,8 +2098,8 @@ async function registerUser(name){
 async function saveScore(){
   if(!USERNAME) return;
   try{
-    const iq=iqFor(MAX_LEVEL);
-    const data=JSON.stringify({name:USERNAME,iq,score:SCORE,level:LEVEL,title:titleFor(MAX_LEVEL),t:Date.now()});
+    const iq=iqFor(EARNED_LEVEL);
+    const data=JSON.stringify({name:USERNAME,iq,score:SCORE,level:LEVEL,title:titleFor(EARNED_LEVEL),t:Date.now()});
     await sSet('score:'+nameKey(USERNAME),data,true);
   }catch(e){
     // Offline — skor merkezi tabloya yazılamadı, sessizce vazgeç (yerel ilerleme etkilenmez)
@@ -2074,7 +2109,7 @@ async function saveScore(){
 function updateUserTag(){
   if(!USERNAME) return;
   document.getElementById('userTag').textContent=
-    '👤 '+USERNAME+' • '+titleFor(MAX_LEVEL);
+    '👤 '+USERNAME+' • '+titleFor(EARNED_LEVEL);
 }
 
 // ── Kullanıcı adı modalı ──
@@ -2388,7 +2423,7 @@ const I18N={
     adWait:'Ad:', adDone:'Ad finished!', adClose:'✕ Close Ad & Solve', adLoading:'Loading ad...', adFailed:'Ad failed to show, try again', adNotReady:'Ad not ready yet, try again shortly', adTimeoutFallback:'No ad available — level unlocked anyway',
     allDone:'🏆 You finished all 255 levels!', empty:'cells empty — only the target must stay empty',
     lbTitle:'🏆 Champions League', lbEmpty:'Nobody yet — be the first!', close:'✕ Close', rankUp:'ranks up', rankDown:'ranks down', rankSame:'no change', rankUnavailable:'Ranking unavailable', rankEntered:'entered the ranking', newTitleLabel:'New Title Unlocked!', currentTitleLabel:'Your Title', offlineRequired:'Internet connection required to create a username', nameTaken:'This username is already taken!', nameTooShort:'Must be at least 3 characters', nameTooLong:'Max 16 characters', nameInvalidChars:'Only letters, numbers and spaces allowed', setUsernameTitle:'👤 Set Username', namePlaceholder:'e.g: BrainKing42', startBtn:'Start ▶', checkingBtn:'Checking...', retryBtn:'⟳ Retry', offlineMode:'Offline — score, IQ & ranking disabled',
-    score:'Score', bonusHint:'Bonus hint earned!', newUser:'New Username', newGame:'New Game', continueGame:'Continue', welcomeBack:'Welcome back', alreadySolved:'Already solved — no points', demoTitle:'Tutorial', demoSub:'Watch how the game works', skipTutorial:'Skip Tutorial', demoWelcome:'👋 Welcome! Let\'s see how it works...', demoDrag:'👆 Hold & drag the piece onto the board', demoComplete:'✅ That\'s it! Now try it yourself'
+    score:'Score', bonusHint:'Bonus hint earned!', newUser:'New Username', newGame:'New Game', continueGame:'Continue', welcomeBack:'Welcome back', alreadySolved:'Already solved — no points', adSolvedNoReward:'Solved via ad — no points or IQ', demoTitle:'Tutorial', demoSub:'Watch how the game works', skipTutorial:'Skip Tutorial', demoWelcome:'👋 Welcome! Let\'s see how it works...', demoDrag:'👆 Hold & drag the piece onto the board', demoComplete:'✅ That\'s it! Now try it yourself'
   },
   tr:{
     play:'Oyna', champ:'Şampiyonlar Ligi', rules:'Oyun Kuralları', levelMap:'Bölüm Haritası', streakDays:'gün seri', privacyOptions:'Gizlilik Tercihleri',
@@ -2406,7 +2441,7 @@ const I18N={
     adWait:'Reklam:', adDone:'Reklam bitti!', adClose:'✕ Reklamı Kapat ve Çöz', adLoading:'Reklam yükleniyor...', adFailed:'Reklam gösterilemedi, tekrar dene', adNotReady:'Reklam henüz hazır değil, birazdan tekrar dene', adTimeoutFallback:'Reklam bulunamadı — bölüm yine de açıldı',
     allDone:'🏆 Tüm 255 bölümü bitirdin!', empty:'kare boş kaldı — sadece hedef kare boş olmalı',
     lbTitle:'🏆 Şampiyonlar Ligi', lbEmpty:'Henüz kimse yok — ilk sen ol!', close:'✕ Kapat', rankUp:'sıra yükseldi', rankDown:'sıra düştü', rankSame:'değişim yok', rankUnavailable:'Sıralama alınamadı', rankEntered:'sıralamaya girdi', newTitleLabel:'Yeni Ünvan Kazandın!', currentTitleLabel:'Ünvanın', offlineRequired:'Kullanıcı adı oluşturmak için internet bağlantısı gerekli', nameTaken:'Bu kullanıcı adı zaten alınmış!', nameTooShort:'En az 3 karakter olmalı', nameTooLong:'En fazla 16 karakter', nameInvalidChars:'Sadece harf, rakam ve boşluk kullanılabilir', setUsernameTitle:'👤 Kullanıcı Adı Belirle', namePlaceholder:'ör: ZekaKralı42', startBtn:'Başla ▶', checkingBtn:'Kontrol ediliyor...', retryBtn:'⟳ Tekrar Dene', offlineMode:'Çevrimdışı — puan, IQ ve sıralama devre dışı',
-    score:'Puan', bonusHint:'Bonus ipucu kazandın!', newUser:'Yeni Kullanıcı Adı', newGame:'Yeni Oyun', continueGame:'Devam Et', welcomeBack:'Tekrar hoş geldin', alreadySolved:'Zaten çözülmüş — puan yok', demoTitle:'Tanıtım', demoSub:'Oyunun nasıl oynandığını izle', skipTutorial:'Tanıtımı Geç', demoWelcome:'👋 Hoş geldin! Nasıl oynandığına bakalım...', demoDrag:'👆 Parçayı basılı tutup tahtaya sürükle', demoComplete:'✅ İşte bu kadar! Şimdi sıra sende'
+    score:'Puan', bonusHint:'Bonus ipucu kazandın!', newUser:'Yeni Kullanıcı Adı', newGame:'Yeni Oyun', continueGame:'Devam Et', welcomeBack:'Tekrar hoş geldin', alreadySolved:'Zaten çözülmüş — puan yok', adSolvedNoReward:'Reklamla çözüldü — puan/IQ yok', demoTitle:'Tanıtım', demoSub:'Oyunun nasıl oynandığını izle', skipTutorial:'Tanıtımı Geç', demoWelcome:'👋 Hoş geldin! Nasıl oynandığına bakalım...', demoDrag:'👆 Parçayı basılı tutup tahtaya sürükle', demoComplete:'✅ İşte bu kadar! Şimdi sıra sende'
   },
   es:{
     play:'Jugar', champ:'Liga de Campeones', rules:'Cómo Jugar', levelMap:'Mapa de Niveles', streakDays:'días seguidos', privacyOptions:'Opciones de Privacidad',
@@ -2424,7 +2459,7 @@ const I18N={
     adWait:'Anuncio:', adDone:'¡Anuncio terminado!', adClose:'✕ Cerrar y Resolver', adLoading:'Cargando anuncio...', adFailed:'Error al mostrar el anuncio, intenta de nuevo', adNotReady:'El anuncio aún no está listo, intenta en breve', adTimeoutFallback:'No hay anuncio disponible — nivel desbloqueado de todas formas',
     allDone:'🏆 ¡Completaste los 255 niveles!', empty:'casillas vacías — solo el objetivo debe quedar vacío',
     lbTitle:'🏆 Liga de Campeones', lbEmpty:'Nadie aún — ¡sé el primero!', close:'✕ Cerrar', rankUp:'subió de puesto', rankDown:'bajó de puesto', rankSame:'sin cambio', rankUnavailable:'Ranking no disponible', rankEntered:'entró al ranking', newTitleLabel:'¡Nuevo Título Desbloqueado!', currentTitleLabel:'Tu Título', offlineRequired:'Se requiere conexión a internet para crear un nombre de usuario', nameTaken:'¡Este nombre de usuario ya está en uso!', nameTooShort:'Debe tener al menos 3 caracteres', nameTooLong:'Máximo 16 caracteres', nameInvalidChars:'Solo letras, números y espacios', setUsernameTitle:'👤 Elegir Nombre de Usuario', namePlaceholder:'ej: ReyMental42', startBtn:'Comenzar ▶', checkingBtn:'Verificando...', retryBtn:'⟳ Reintentar', offlineMode:'Sin conexión — puntos, IQ y ranking desactivados',
-    score:'Puntos', bonusHint:'¡Pista extra ganada!', newUser:'Nuevo Usuario', newGame:'Nuevo Juego', continueGame:'Continuar', welcomeBack:'Bienvenido de nuevo', alreadySolved:'Ya resuelto — sin puntos', demoTitle:'Tutorial', demoSub:'Mira cómo funciona el juego', skipTutorial:'Omitir Tutorial', demoWelcome:'👋 ¡Bienvenido! Veamos cómo funciona...', demoDrag:'👆 Mantén y arrastra la pieza al tablero', demoComplete:'✅ ¡Eso es todo! Ahora inténtalo tú'
+    score:'Puntos', bonusHint:'¡Pista extra ganada!', newUser:'Nuevo Usuario', newGame:'Nuevo Juego', continueGame:'Continuar', welcomeBack:'Bienvenido de nuevo', alreadySolved:'Ya resuelto — sin puntos', adSolvedNoReward:'Resuelto con anuncio — sin puntos ni IQ', demoTitle:'Tutorial', demoSub:'Mira cómo funciona el juego', skipTutorial:'Omitir Tutorial', demoWelcome:'👋 ¡Bienvenido! Veamos cómo funciona...', demoDrag:'👆 Mantén y arrastra la pieza al tablero', demoComplete:'✅ ¡Eso es todo! Ahora inténtalo tú'
   },
   ar:{
     play:'العب', champ:'دوري الأبطال', rules:'كيفية اللعب', levelMap:'خريطة المراحل', streakDays:'أيام متتالية', privacyOptions:'خيارات الخصوصية',
@@ -2442,7 +2477,7 @@ const I18N={
     adWait:'إعلان:', adDone:'انتهى الإعلان!', adClose:'✕ أغلق وحُل', adLoading:'جارٍ تحميل الإعلان...', adFailed:'تعذر عرض الإعلان، حاول مرة أخرى', adNotReady:'الإعلان غير جاهز بعد، حاول بعد قليل', adTimeoutFallback:'لا يوجد إعلان متاح — تم فتح المرحلة على أي حال',
     allDone:'🏆 أنهيت كل الـ255 مرحلة!', empty:'خانات فارغة — فقط الهدف يجب أن يبقى فارغاً',
     lbTitle:'🏆 دوري الأبطال', lbEmpty:'لا أحد بعد — كن الأول!', close:'✕ إغلاق', rankUp:'ترقية بالترتيب', rankDown:'تراجع بالترتيب', rankSame:'بدون تغيير', rankUnavailable:'الترتيب غير متاح', rankEntered:'دخل الترتيب', newTitleLabel:'لقب جديد مفتوح!', currentTitleLabel:'لقبك', offlineRequired:'يلزم الاتصال بالإنترنت لإنشاء اسم مستخدم', nameTaken:'اسم المستخدم هذا مُستخدم بالفعل!', nameTooShort:'يجب ألا يقل عن 3 أحرف', nameTooLong:'الحد الأقصى 16 حرفاً', nameInvalidChars:'الأحرف والأرقام والمسافات فقط', setUsernameTitle:'👤 تعيين اسم المستخدم', namePlaceholder:'مثال: ملك٤٢', startBtn:'ابدأ ▶', checkingBtn:'جارٍ التحقق...', retryBtn:'⟳ أعد المحاولة', offlineMode:'غير متصل — النقاط والذكاء والترتيب معطلة',
-    score:'النقاط', bonusHint:'حصلت على تلميح إضافي!', newUser:'اسم مستخدم جديد', newGame:'لعبة جديدة', continueGame:'متابعة', welcomeBack:'مرحباً بعودتك', alreadySolved:'تم حلها مسبقاً — بلا نقاط', demoTitle:'تعليمي', demoSub:'شاهد كيف تعمل اللعبة', skipTutorial:'تخطي الشرح', demoWelcome:'👋 مرحباً! لنرَ كيف تعمل...', demoDrag:'👆 اضغط مطولاً واسحب القطعة إلى اللوحة', demoComplete:'✅ هذا كل شيء! الآن جرّب بنفسك'
+    score:'النقاط', bonusHint:'حصلت على تلميح إضافي!', newUser:'اسم مستخدم جديد', newGame:'لعبة جديدة', continueGame:'متابعة', welcomeBack:'مرحباً بعودتك', alreadySolved:'تم حلها مسبقاً — بلا نقاط', adSolvedNoReward:'حُلّت عبر الإعلان — بلا نقاط أو ذكاء', demoTitle:'تعليمي', demoSub:'شاهد كيف تعمل اللعبة', skipTutorial:'تخطي الشرح', demoWelcome:'👋 مرحباً! لنرَ كيف تعمل...', demoDrag:'👆 اضغط مطولاً واسحب القطعة إلى اللوحة', demoComplete:'✅ هذا كل شيء! الآن جرّب بنفسك'
   },
   ru:{
     play:'Играть', champ:'Лига Чемпионов', rules:'Как играть', levelMap:'Карта уровней', streakDays:'дней подряд', privacyOptions:'Настройки конфиденциальности',
@@ -2460,7 +2495,7 @@ const I18N={
     adWait:'Реклама:', adDone:'Реклама окончена!', adClose:'✕ Закрыть и Решить', adLoading:'Загрузка рекламы...', adFailed:'Не удалось показать рекламу, попробуйте снова', adNotReady:'Реклама ещё не готова, попробуйте через момент', adTimeoutFallback:'Реклама недоступна — уровень всё равно открыт',
     allDone:'🏆 Ты прошёл все 255 уровней!', empty:'клеток пусто — пустой должна быть только цель',
     lbTitle:'🏆 Лига Чемпионов', lbEmpty:'Пока никого — будь первым!', close:'✕ Закрыть', rankUp:'подъём в рейтинге', rankDown:'падение в рейтинге', rankSame:'без изменений', rankUnavailable:'Рейтинг недоступен', rankEntered:'попал в рейтинг', newTitleLabel:'Новое звание получено!', currentTitleLabel:'Твоё звание', offlineRequired:'Для создания имени пользователя нужен интернет', nameTaken:'Это имя уже занято!', nameTooShort:'Минимум 3 символа', nameTooLong:'Максимум 16 символов', nameInvalidChars:'Только буквы, цифры и пробелы', setUsernameTitle:'👤 Задать Имя Пользователя', namePlaceholder:'напр: КорольУма42', startBtn:'Начать ▶', checkingBtn:'Проверка...', retryBtn:'⟳ Повторить', offlineMode:'Офлайн — очки, IQ и рейтинг отключены',
-    score:'Очки', bonusHint:'Получена бонусная подсказка!', newUser:'Новый ник', newGame:'Новая игра', continueGame:'Продолжить', welcomeBack:'С возвращением', alreadySolved:'Уже решено — без очков', demoTitle:'Обучение', demoSub:'Посмотри, как играть', skipTutorial:'Пропустить', demoWelcome:'👋 Добро пожаловать! Посмотрим как это работает...', demoDrag:'👆 Удерживай и тяни фигуру на доску', demoComplete:'✅ Вот и всё! Теперь попробуй сам'
+    score:'Очки', bonusHint:'Получена бонусная подсказка!', newUser:'Новый ник', newGame:'Новая игра', continueGame:'Продолжить', welcomeBack:'С возвращением', alreadySolved:'Уже решено — без очков', adSolvedNoReward:'Решено через рекламу — без очков и IQ', demoTitle:'Обучение', demoSub:'Посмотри, как играть', skipTutorial:'Пропустить', demoWelcome:'👋 Добро пожаловать! Посмотрим как это работает...', demoDrag:'👆 Удерживай и тяни фигуру на доску', demoComplete:'✅ Вот и всё! Теперь попробуй сам'
   }
 };
 let LANG=localStorage_get('pz_lang')||'en';
@@ -2499,7 +2534,7 @@ function applyLang(){
 
 function refreshLevelTexts(){
   if(typeof demoActive!=='undefined' && demoActive) return; // demo modunda üzerine yazma
-  lvlBadge.textContent=`${T('lvl')} ${LEVEL+1}/${TOTAL_LEVELS}`;
+  lvlBadge.textContent=`🎯 ${LEVEL+1}/${TOTAL_LEVELS}`;
   subTxt.innerHTML=`${GRID}×${GRID} | ${T('target')}: <b style="color:#e04040">${CELL_NUM}</b> ${T('targetEnd')} | ${T('tap')}`;
 }
 
@@ -2509,7 +2544,7 @@ function refreshMenuButtons(){
   document.getElementById('mmContinue').style.display=hasUser?'flex':'none';
   document.getElementById('mmNewGame').style.display=hasUser?'flex':'none';
   const mu=document.getElementById('menuUserRow');
-  mu.textContent=hasUser?(T('welcomeBack')+', '+USERNAME+'! 🧠 IQ '+iqFor(MAX_LEVEL)+' • '+titleFor(MAX_LEVEL)+' • ⭐ '+SCORE):'';
+  mu.textContent=hasUser?(T('welcomeBack')+', '+USERNAME+'! 🧠 IQ '+iqFor(EARNED_LEVEL)+' • '+titleFor(EARNED_LEVEL)+' • ⭐ '+SCORE):'';
   updateStreakUI();
 
   // GDPR/UMP: gizlilik tercihleri butonu sadece native köprü bunu gerektiriyorsa görünür.
