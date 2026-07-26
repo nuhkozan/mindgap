@@ -257,6 +257,7 @@ public class MainActivity extends Activity {
     private boolean adIsLoading = false;
     private boolean isMobileAdsInitialized = false;
     private ConsentInformation consentInformation;
+    private String lastAdDebugInfo = "init bekleniyor";
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -291,6 +292,7 @@ public class MainActivity extends Activity {
     private void requestConsentAndInitAds() {
         consentInformation = UserMessagingPlatform.getConsentInformation(this);
         ConsentRequestParameters params = new ConsentRequestParameters.Builder().build();
+        lastAdDebugInfo = "rıza bilgisi isteniyor...";
 
         consentInformation.requestConsentInfoUpdate(
                 this,
@@ -298,14 +300,26 @@ public class MainActivity extends Activity {
                 () -> UserMessagingPlatform.loadAndShowConsentFormIfRequired(
                         MainActivity.this,
                         formError -> {
-                            if (consentInformation.canRequestAds()) {
+                            if (formError != null) {
+                                lastAdDebugInfo = "rıza formu hatası: " + formError.getMessage();
+                            } else if (consentInformation.canRequestAds()) {
                                 initializeMobileAdsSdk();
+                            } else {
+                                lastAdDebugInfo = "canRequestAds() false (rıza formu sonrası)";
                             }
                         }),
                 requestConsentError -> {
-                    // Rıza bilgisi güncellenemedi (ör. bağlantı yok) — daha önce
-                    // rıza verilmişse yine de reklam gösterilebilir, aşağıdaki
-                    // kontrol bunu zaten yapıyor.
+                    // Rıza bilgisi güncellenemedi (ör. ağ hatası). Google'ın resmi
+                    // UMP dokümantasyonu bu durumda da canRequestAds() kontrol
+                    // edilmesini söylüyor — önceki oturumdan geçerli bir rıza
+                    // durumu varsa yine de reklam gösterilebilir. Bu kontrol
+                    // olmadan, tek bir ağ hatası o oturumda reklamları TAMAMEN
+                    // devre dışı bırakıyordu (asıl hata buydu).
+                    lastAdDebugInfo = "consent update hatası " + requestConsentError.getErrorCode()
+                            + ": " + requestConsentError.getMessage();
+                    if (consentInformation.canRequestAds()) {
+                        initializeMobileAdsSdk();
+                    }
                 });
 
         // Önceki oturumdan geçerli bir rıza zaten varsa (ikinci ve sonraki
@@ -319,7 +333,11 @@ public class MainActivity extends Activity {
     private void initializeMobileAdsSdk() {
         if (isMobileAdsInitialized) return;
         isMobileAdsInitialized = true;
-        MobileAds.initialize(this, initializationStatus -> { });
+        lastAdDebugInfo = "Ads SDK başlatılıyor...";
+        MobileAds.initialize(this, initializationStatus -> {
+            lastAdDebugInfo = "Ads SDK başlatıldı, reklam yükleniyor...";
+            evalJs("window.onAdsSdkInitialized && window.onAdsSdkInitialized()");
+        });
         loadRewardedAd();
     }
 
@@ -333,12 +351,14 @@ public class MainActivity extends Activity {
                     public void onAdLoaded(RewardedAd ad) {
                         rewardedAd = ad;
                         adIsLoading = false;
+                        lastAdDebugInfo = "reklam yüklendi, hazır";
                     }
 
                     @Override
                     public void onAdFailedToLoad(LoadAdError error) {
                         rewardedAd = null;
                         adIsLoading = false;
+                        lastAdDebugInfo = "load hata " + error.getCode() + ": " + error.getMessage();
                         // Sessizce vazgeç; bir sonraki showRewardedAd() çağrısı yeniden dener.
                     }
                 });
@@ -353,6 +373,14 @@ public class MainActivity extends Activity {
         });
     }
 
+    /** Bir Java string'ini güvenli bir JS string literal'ine çevirir (tek tırnaklarla). */
+    private static String jsStr(String s) {
+        if (s == null) s = "";
+        String escaped = s.replace("\\", "\\\\").replace("'", "\\'")
+                .replace("\n", " ").replace("\r", " ");
+        return "'" + escaped + "'";
+    }
+
     /** index.html içinden "AndroidBridge.xxx()" ile çağrılan native köprü. */
     private class AndroidBridge {
 
@@ -363,11 +391,13 @@ public class MainActivity extends Activity {
                 public void run() {
                     if (!isMobileAdsInitialized) {
                         // Rıza henüz alınmadı/tamamlanmadı — reklam sistemi hazır değil.
-                        evalJs("window.onRewardedAdNotReady && window.onRewardedAdNotReady()");
+                        evalJs("window.onRewardedAdNotReady && window.onRewardedAdNotReady(" 
+                                + jsStr("Ads SDK henüz başlatılmadı (rıza/UMP bekleniyor)") + ")");
                         return;
                     }
                     if (rewardedAd == null) {
-                        evalJs("window.onRewardedAdNotReady && window.onRewardedAdNotReady()");
+                        evalJs("window.onRewardedAdNotReady && window.onRewardedAdNotReady("
+                                + jsStr(lastAdDebugInfo) + ")");
                         loadRewardedAd();
                         return;
                     }
@@ -383,7 +413,8 @@ public class MainActivity extends Activity {
                         public void onAdFailedToShowFullScreenContent(AdError adError) {
                             rewardedAd = null;
                             loadRewardedAd();
-                            evalJs("window.onRewardedAdFailed && window.onRewardedAdFailed()");
+                            evalJs("window.onRewardedAdFailed && window.onRewardedAdFailed("
+                                    + jsStr("show hata: " + adError.getMessage()) + ")");
                         }
                     });
 
@@ -400,6 +431,13 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public boolean isRewardedAdReady() {
             return isMobileAdsInitialized && rewardedAd != null;
+        }
+
+        /** Teşhis amaçlı: reklam sisteminin şu anki durumunu okunabilir metin olarak döner. */
+        @JavascriptInterface
+        public String getAdDebugInfo() {
+            return "init=" + isMobileAdsInitialized + " | ready=" + (rewardedAd != null)
+                    + " | " + lastAdDebugInfo;
         }
 
         /** Kullanıcı daha sonra GDPR rıza tercihini değiştirmek isterse çağrılır. */
