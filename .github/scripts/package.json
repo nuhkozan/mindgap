@@ -1,7 +1,7 @@
 {
   "name": "mindgap-bubblewrap-runner",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "dependencies": {
     "node-pty": "^1.0.0"
   }
