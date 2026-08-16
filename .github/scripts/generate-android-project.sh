@@ -402,11 +402,25 @@ public class MainActivity extends Activity {
                         return;
                     }
 
+                    // ÖNEMLİ: ödülün kazanılıp kazanılmadığını burada sadece BİR BAYRAKLA
+                    // işaretliyoruz. JS'e haber vermeyi (window.onRewardEarned) reklam
+                    // GERÇEKTEN kapanana kadar (onAdDismissedFullScreenContent) ERTELİYORUZ.
+                    // Önceki sürümde bildirim onUserEarnedReward() içinde yapılıyordu — bu
+                    // callback reklam HÂLÂ TAM EKRAN AÇIKKEN (genellikle izlemenin belirli
+                    // bir yüzdesinde) tetiklenir. Bunun sonucunda JS tarafındaki çözüm
+                    // animasyonu reklam hâlâ ekranı kaplarken arka planda çalışıp bitiyor,
+                    // kullanıcı reklamdan döndüğünde bulmacayı "zaten dolu" görüyordu.
+                    final boolean[] rewardEarned = {false};
+
                     rewardedAd.setFullScreenContentCallback(new FullScreenContentCallback() {
                         @Override
                         public void onAdDismissedFullScreenContent() {
                             rewardedAd = null;
                             loadRewardedAd(); // Bir sonraki gösterim için önceden yükle
+                            if (rewardEarned[0]) {
+                                // Reklam artık GERÇEKTEN kapandı — JS'e ancak ŞİMDİ haber ver.
+                                evalJs("window.onRewardEarned && window.onRewardEarned()");
+                            }
                         }
 
                         @Override
@@ -421,7 +435,8 @@ public class MainActivity extends Activity {
                     rewardedAd.show(MainActivity.this, new OnUserEarnedRewardListener() {
                         @Override
                         public void onUserEarnedReward(RewardItem rewardItem) {
-                            evalJs("window.onRewardEarned && window.onRewardEarned()");
+                            // Sadece bayrağı işaretle — JS'e burada HABER VERME (yukarıdaki nota bakın).
+                            rewardEarned[0] = true;
                         }
                     });
                 }
