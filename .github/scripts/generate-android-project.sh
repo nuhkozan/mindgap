@@ -197,8 +197,13 @@ EOF
 
 # ---------- İkon ----------
 # Canlı siteden indiriyoruz — repoda binary tutmaya gerek kalmıyor.
+# GitHub Actions runner'ında ara sıra görülen geçici ağ kesintilerine
+# (ör. "Recv failure: Connection reset by peer") karşı yeniden dener.
 echo "==> İkon indiriliyor: $ICON_URL"
-curl -fsSL "$ICON_URL" -o "$PROJ/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
+curl -fsSL \
+  --retry 5 --retry-delay 3 --retry-all-errors \
+  --connect-timeout 10 --max-time 30 \
+  "$ICON_URL" -o "$PROJ/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
 
 # ---------- MainActivity.java ----------
 # WebView + AdMob ödüllü reklam köprüsü + UMP (GDPR/rıza) akışı.
