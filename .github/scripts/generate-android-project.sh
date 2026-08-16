@@ -259,6 +259,8 @@ public class MainActivity extends Activity {
 
     private WebView webView;
     private RewardedInterstitialAd rewardedAd;
+    private boolean isAdCurrentlyShowing = false; // native-taraflı ek güvenlik: JS sinyali ulaşana kadarki
+                                                    // kısa pencerede de ikinci bir show() çağrısını engeller
     private boolean adIsLoading = false;
     private boolean isMobileAdsInitialized = false;
     private ConsentInformation consentInformation;
@@ -394,6 +396,12 @@ public class MainActivity extends Activity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
+                    if (isAdCurrentlyShowing) {
+                        // Zaten bir reklam ekranda — JS tarafının 2sn'lik yeniden deneme
+                        // döngüsü henüz "showing" sinyalini almamış olabilir; burada da
+                        // sessizce vazgeçerek ikinci bir reklamın kuyruğa girmesini engelle.
+                        return;
+                    }
                     if (!isMobileAdsInitialized) {
                         // Rıza henüz alınmadı/tamamlanmadı — reklam sistemi hazır değil.
                         evalJs("window.onRewardedAdNotReady && window.onRewardedAdNotReady(" 
@@ -419,17 +427,36 @@ public class MainActivity extends Activity {
 
                     rewardedAd.setFullScreenContentCallback(new FullScreenContentCallback() {
                         @Override
+                        public void onAdShowedFullScreenContent() {
+                            isAdCurrentlyShowing = true;
+                            // Reklam artık GERÇEKTEN ekranda görünüyor — JS'e hemen haber ver ki
+                            // 2 saniyede bir tekrar deneyen döngüyü DURDURSUN. Aksi hâlde ilk
+                            // reklamın yüklenip görünmesi 2 saniyeden uzun sürerse, JS tarafı
+                            // showRewardedAd()'ı BİR DAHA çağırıyor ve arka arkaya İKİNCİ bir
+                            // reklam kuyruğa giriyordu ("2 reklam çıkıyor" şikayetinin kök nedeni).
+                            evalJs("window.onRewardedAdShowing && window.onRewardedAdShowing()");
+                        }
+
+                        @Override
                         public void onAdDismissedFullScreenContent() {
+                            isAdCurrentlyShowing = false;
                             rewardedAd = null;
                             loadRewardedAd(); // Bir sonraki gösterim için önceden yükle
                             if (rewardEarned[0]) {
                                 // Reklam artık GERÇEKTEN kapandı — JS'e ancak ŞİMDİ haber ver.
                                 evalJs("window.onRewardEarned && window.onRewardEarned()");
+                            } else {
+                                // Kullanıcı ödülü kazanmadan reklamı erken kapattı. JS artık
+                                // (onAdShowedFullScreenContent sinyaliyle) 10sn'lik zaman aşımı
+                                // güvenlik ağını iptal ettiği için, burada JS'e haber
+                                // VERMEZSEK "Çöz" butonu sonsuza kadar kilitli kalır.
+                                evalJs("window.onRewardedAdClosedWithoutReward && window.onRewardedAdClosedWithoutReward()");
                             }
                         }
 
                         @Override
                         public void onAdFailedToShowFullScreenContent(AdError adError) {
+                            isAdCurrentlyShowing = false;
                             rewardedAd = null;
                             loadRewardedAd();
                             evalJs("window.onRewardedAdFailed && window.onRewardedAdFailed("
