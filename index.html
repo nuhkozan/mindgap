@@ -1644,28 +1644,37 @@ function endAdSession(){
 function solveAfterAd(){
   SOLVED_VIA_AD=true;
   const run=()=>{
-    solveWithAnimation((success)=>{
-      if(success){
-        checkWin().catch(e=>console.error('checkWin hata (reklam akışı):',e));
-      } else {
-        statusEl.textContent='Çözüm bulunamadı';
-      }
-    });
+    // Reklamın native kapanış geçişiyle WebView'ın gerçekten görünür/odaklı
+    // olması arasında kısa bir örtüşme payı bırak — animasyon kullanıcı
+    // GERÇEKTEN oyuna dönmeden asla başlamasın.
+    setTimeout(()=>{
+      solveWithAnimation((success)=>{
+        if(success){
+          checkWin().catch(e=>console.error('checkWin hata (reklam akışı):',e));
+        } else {
+          statusEl.textContent='Çözüm bulunamadı';
+        }
+      });
+    },350);
   };
   // ÖNEMLİ: reklam (native fullscreen Activity) hâlâ ekranın üstündeyse
-  // sayfa "visible" değildir; animasyon o sırada arka planda sessizce
+  // sayfa "visible/odaklı" değildir; animasyon o sırada arka planda sessizce
   // tamamlanıp kullanıcı geri döndüğünde tahtayı "zaten dolu" gösterirdi.
-  // Kullanıcı gerçekten oyuna dönene kadar bekleyip animasyonu O ZAMAN başlatıyoruz.
-  if(document.visibilityState==='visible'){
+  // Bazı Android WebView sürümlerinde visibilitychange yerine (veya onunla
+  // birlikte) window focus/blur daha güvenilir tetiklenir — ikisini de dinliyoruz.
+  const isVisible=()=>document.visibilityState==='visible' && !document.hidden;
+  if(isVisible()){
     run();
   } else {
     const onVis=()=>{
-      if(document.visibilityState==='visible'){
+      if(isVisible()){
         document.removeEventListener('visibilitychange',onVis);
+        window.removeEventListener('focus',onVis);
         run();
       }
     };
     document.addEventListener('visibilitychange',onVis);
+    window.addEventListener('focus',onVis);
   }
 }
 
@@ -2387,14 +2396,25 @@ async function askUsername(){
 
 // ── Liderlik tablosu ──
 async function fetchLeaderboardEntries(){
-  const keys=await sList('score:',true);
+  // ÖNEMLİ: önceki sürüm önce tüm 'score:*' doküman ID'lerini çekiyor, SONRA
+  // her birini TEK TEK ve SIRAYLA (await ile) yeniden çekiyordu — 116 oyuncu
+  // varsa 116 ayrı ağ gidiş-dönüşü, art arda! Bu, "2-3 dakika" bekleme
+  // şikayetinin gerçek kök nedeniydi. Firestore'un aralık sorgusu zaten TÜM
+  // doküman verisini TEK istekte döndürüyor — bunu doğrudan kullanıyoruz.
+  const prefix='score:';
+  const snap=await db.collection('shared_kv')
+    .where(firebase.firestore.FieldPath.documentId(), '>=', prefix)
+    .where(firebase.firestore.FieldPath.documentId(), '<', prefix+'\uf8ff')
+    .get();
   const entries=[];
-  for(const k of keys){
+  snap.docs.forEach(doc=>{
     try{
-      const v=await sGet(k,true);
-      if(v){const d=JSON.parse(v);if(d&&d.name) entries.push(d);}
+      const raw=doc.data().value;
+      if(!raw) return;
+      const d=JSON.parse(raw);
+      if(d && d.name) entries.push(d);
     }catch(e){}
-  }
+  });
   entries.sort((a,b)=>(b.score||0)-(a.score||0));
   return entries;
 }
