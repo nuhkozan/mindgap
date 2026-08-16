@@ -1754,11 +1754,40 @@ document.getElementById('solveBtn').onclick=()=>{
 // Native (Android) taraftan reklam bittiğinde çağrılan global callback'ler.
 // MainActivity.java bunları webView.evaluateJavascript(...) ile tetikler.
 let lastAdDebugMsg='';
+window.onRewardedAdShowing=function(){
+  // Reklam artık GERÇEKTEN ekranda — 2 saniyede bir tekrar deneyen döngüyü
+  // ve 10 saniyelik "vazgeç ve otomatik çöz" zaman aşımını DURDUR. Aksi hâlde:
+  // (a) döngü showRewardedAd()'ı tekrar çağırıp İKİNCİ bir reklamı kuyruğa
+  //     sokabilir ("2 reklam çıkıyor" hatası),
+  // (b) 10sn'lik zaman aşımı, kullanıcı reklamı hâlâ izlerken (video genelde
+  //     10sn'den uzun sürer) devreye girip erken/hatalı "zaman aşımı" sonucu
+  //     üretebilirdi.
+  // Ödül/kapanış sonucu artık tamamen native'in onRewardEarned / onAdFailed
+  // çağrılarına bırakılıyor — reklam kendi doğal süresinde bitene kadar beklenir.
+  clearInterval(adRetryTimer); adRetryTimer=null;
+  clearTimeout(adTimeoutTimer); adTimeoutTimer=null;
+  clearInterval(adCountdownTimer); adCountdownTimer=null;
+  const badge=document.getElementById('adCountdownBadge');
+  if(badge) badge.style.display='none';
+};
 window.onRewardEarned=function(){
   if(adAlreadyHandled){ endAdSession(); return; } // zaman aşımıyla zaten çözülmüş, geç kalan ödül
   adAlreadyHandled=true;
   endAdSession();
   if(LEVEL!==adRequestedLevel) return; // kullanıcı reklam gösterilirken başka bölüme geçmiş olamaz ama yine de güvenlik ağı
+  solveAfterAd();
+};
+window.onRewardedAdClosedWithoutReward=function(){
+  // Kullanıcı reklamı ödül kazanmadan erken kapattı. onRewardedAdShowing zaten
+  // 10sn'lik zaman aşımını iptal ettiği için, burada oturumu KENDİMİZ
+  // sonlandırmazsak "Çöz" butonu sonsuza kadar kilitli kalır.
+  if(adAlreadyHandled){ endAdSession(); return; }
+  adAlreadyHandled=true;
+  endAdSession();
+  if(LEVEL!==adRequestedLevel) return;
+  // Tasarım ilkesi: kullanıcı asla kalıcı olarak bölümde sıkışıp kalmamalı —
+  // reklamı yarıda kapatsa bile bölüm otomatik açılır, sadece ödülsüz.
+  showToast(T('adTimeoutFallback')+(lastAdDebugMsg?' — '+lastAdDebugMsg:''),4000);
   solveAfterAd();
 };
 window.onRewardedAdFailed=function(msg){
