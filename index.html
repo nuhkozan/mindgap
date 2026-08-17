@@ -596,7 +596,36 @@ const SETS={
   9:['R6','R6','R6','R6','L5','P5','T5','W5','Z5','N5','Y5','V5','O4','T4','S4','L4'],
 };
 
-// Bölüm yapısı: 25×(5x5) + 36×(6x6) + 49×(7x7) = 110 bölüm
+// 5×5 aşaması için AŞAMALI ŞEKİL TANITIMI — her 3 bölümde bir yeni bir parça
+// şekli tanıtılır. Her tier, bağımsız bir exact-cover backtracking çözücüsüyle
+// (25 hedef-hücre pozisyonunun TAMAMI için) önceden doğrulanmıştır — sadece
+// hücre sayısı toplamının uyması (24) ÇÖZÜLEBİLİRLİĞİ GARANTİ ETMEZ; her
+// kombinasyon gerçekten test edilmiştir. Diğer grid boyutları (6-9) şimdilik
+// mevcut sabit (tek) setlerini kullanmaya devam ediyor — o boyutlar için
+// tier varyasyonu ayrı bir doğrulama turu gerektiriyor, henüz yapılmadı.
+const TIERS5=[
+  ['L5','P5','S4','O4','T4','I2'],   // tier0 (bölüm 1-3): baz set
+  ['L3','P5','S4','Y5','Y5','I2'],   // tier1 (bölüm 4-6): + L3
+  ['I3','L3','S4','Y5','P5','O4'],   // tier2 (bölüm 7-9): + I3
+  ['T5','L3','P5','T4','W5','I2'],   // tier3 (bölüm 10-12): + T5
+  ['W5','P5','I3','I4','Y5','I2'],   // tier4 (bölüm 13-15): + W5
+  ['V5','L4','L5','S4','I4','I2'],   // tier5 (bölüm 16-18): + V5
+  ['N5','T4','L3','P5','W5','I2'],   // tier6 (bölüm 19-21): + N5
+  ['Z5','P5','L5','I3','I4','I2'],   // tier7 (bölüm 22-24): + Z5
+  ['Y5','S4','T5','L3','Y5','I2'],   // tier8 (bölüm 25): + Y5
+];
+
+// Belirli bir bölüm için doğru parça setini döndürür. Sadece 5×5 aşaması
+// tier'lenmiş durumda; diğer grid boyutları eskisi gibi tek sabit set kullanır.
+function shapeSetFor(grid, local){
+  if(grid===5){
+    const tierIdx=Math.min(Math.floor(local/3), TIERS5.length-1);
+    return TIERS5[tierIdx];
+  }
+  return SETS[grid];
+}
+
+// Bölüm yapısı: 25×(5x5) + 36×(6x6) + 49×(7x7) + 64×(8x8) + 81×(9x9) = 255 bölüm
 const STAGES=[
   {grid:5, count:25},
   {grid:6, count:36},
@@ -613,7 +642,7 @@ function levelInfo(idx){ // idx: 0-based genel bölüm no
       const local=idx-off; // 0-based bu aşamada
       const col=Math.floor(local/st.grid);
       const row=local%st.grid;
-      return {grid:st.grid, emptyR:row, emptyC:col, cellNum:local+1};
+      return {grid:st.grid, emptyR:row, emptyC:col, cellNum:local+1, local};
     }
     off+=st.count;
   }
@@ -695,6 +724,7 @@ function localStorage_get(k){ try{return localStorage.getItem(k);}catch(e){retur
 function localStorage_set(k,v){ try{localStorage.setItem(k,v);}catch(e){} }
 
 let GRID=5, EMPTY_R=0, EMPTY_C=0, CELL_NUM=1;
+let CURRENT_SHAPE_SET=SETS[5]; // aktif bölümün gerçek parça listesi (5×5'te tier'e göre değişir)
 let CS=50;
 const pieces={};
 const boardMap={};
@@ -717,7 +747,7 @@ function setupLayout(){
   const stH=20;
 
   // Parça sayısına göre tepsi satırı
-  const n=(SETS[GRID]||[]).length;
+  const n=(CURRENT_SHAPE_SET||[]).length;
   const rows=trayRowsFor(n);
   // Kompakt tepsi: board ana odak
   const minRowH=Math.max(40,Math.floor(vh*0.062));
@@ -1826,12 +1856,13 @@ function loadLevel(){
   SOLVED_VIA_AD=false; // her yeni bölümde sıfırlanır
   const info=levelInfo(LEVEL);
   GRID=info.grid;EMPTY_R=info.emptyR;EMPTY_C=info.emptyC;CELL_NUM=info.cellNum;
+  CURRENT_SHAPE_SET=shapeSetFor(GRID, info.local);
 
   // State sıfırla
   Object.keys(pieces).forEach(k=>delete pieces[k]);
   Object.keys(boardMap).forEach(k=>delete boardMap[k]);
 
-  SETS[GRID].forEach((shapeName,i)=>{
+  CURRENT_SHAPE_SET.forEach((shapeName,i)=>{
     const def=SHAPES[shapeName];
     const id=shapeName+'_'+i;
     pieces[id]={
