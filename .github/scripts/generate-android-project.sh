@@ -28,8 +28,8 @@ LAUNCH_URL="https://nuhkozan.github.io/mindgap/"
 PATH_PREFIX="/mindgap/"
 THEME_COLOR="#060A10"
 BG_COLOR="#060A10"
-VERSION_NAME="1.1.0"
-VERSION_CODE="2"
+VERSION_NAME="1.1.1"
+VERSION_CODE="3"
 ICON_URL="https://nuhkozan.github.io/mindgap/icons/icon-512.png"
 
 # ── AdMob ──
