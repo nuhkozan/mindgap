@@ -57,11 +57,17 @@ jobs:
         if: always()
         run: find android-project -type f \( -name "*.apk" -o -name "*.aab" \) || echo "hiç apk/aab yok"
 
+      # ÖNEMLİ: Sadece Gradle'ın NİHAİ, İMZALANMIŞ çıktısını (outputs/ klasörü)
+      # arıyoruz. Önceki sürüm tüm projede genel bir 'find ... -name *.aab'
+      # yapıyordu — bu, build/intermediates/ altındaki İMZASIZ ara .aab
+      # dosyalarını da buluyordu ve 'find' sıralaması garanti olmadığı için
+      # bazen 'head -n1' o ara (imzasız) dosyayı seçiyordu. Play Console'un
+      # "tüm paketler imzalanmış olmalı" hatasının kök nedeni buydu.
       - name: APK ve AAB yollarını bul
         id: find_files
         run: |
-          echo "apk_path=$(find android-project -name '*.apk' | head -n1)" >> "$GITHUB_OUTPUT"
-          echo "aab_path=$(find android-project -name '*.aab' | head -n1)" >> "$GITHUB_OUTPUT"
+          echo "apk_path=$(find android-project/app/build/outputs/apk/release -name '*.apk' | head -n1)" >> "$GITHUB_OUTPUT"
+          echo "aab_path=$(find android-project/app/build/outputs/bundle/release -name '*.aab' | head -n1)" >> "$GITHUB_OUTPUT"
 
       - name: Artifact olarak yükle (APK)
         if: steps.find_files.outputs.apk_path != ''
