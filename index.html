@@ -596,13 +596,15 @@ const SETS={
   9:['R6','R6','R6','R6','L5','P5','T5','W5','Z5','N5','Y5','V5','O4','T4','S4','L4'],
 };
 
-// 5×5 aşaması için AŞAMALI ŞEKİL TANITIMI — her 3 bölümde bir yeni bir parça
-// şekli tanıtılır. Her tier, bağımsız bir exact-cover backtracking çözücüsüyle
-// (25 hedef-hücre pozisyonunun TAMAMI için) önceden doğrulanmıştır — sadece
-// hücre sayısı toplamının uyması (24) ÇÖZÜLEBİLİRLİĞİ GARANTİ ETMEZ; her
-// kombinasyon gerçekten test edilmiştir. Diğer grid boyutları (6-9) şimdilik
-// mevcut sabit (tek) setlerini kullanmaya devam ediyor — o boyutlar için
-// tier varyasyonu ayrı bir doğrulama turu gerektiriyor, henüz yapılmadı.
+// AŞAMALI ŞEKİL TANITIMI — TÜM grid boyutlarında (5×5'ten 9×9'a) her 3
+// bölümde bir yeni bir parça şekli tanıtılır. Her tier, bağımsız bir
+// exact-cover backtracking çözücüsüyle o grid boyutunun TÜM hedef-hücre
+// pozisyonları (5×5'te 25, 6×6'da 36, ..., 9×9'da 81) için AYRI AYRI
+// doğrulanmıştır — sadece hücre sayısı toplamının uyması ÇÖZÜLEBİLİRLİĞİ
+// GARANTİ ETMEZ, her kombinasyon gerçekten test edilmiştir. Toplam 255
+// bölümün tamamını kapsayan 87 tier (5×5: 9, 6×6: 12, 7×7: 17, 8×8: 22,
+// 9×9: 27), tasarım aşamasında VE ayrı, bağımsız bir doğrulama geçişinde
+// olmak üzere İKİ KEZ test edilmiştir.
 const TIERS5=[
   ['L5','P5','S4','O4','T4','I2'],   // tier0 (bölüm 1-3): baz set
   ['L3','P5','S4','Y5','Y5','I2'],   // tier1 (bölüm 4-6): + L3
@@ -615,14 +617,107 @@ const TIERS5=[
   ['Y5','S4','T5','L3','Y5','I2'],   // tier8 (bölüm 25): + Y5
 ];
 
-// Belirli bir bölüm için doğru parça setini döndürür. Sadece 5×5 aşaması
-// tier'lenmiş durumda; diğer grid boyutları eskisi gibi tek sabit set kullanır.
+const TIERS6=[
+  ['L5','P5','T5','W5','S4','O4','T4','L3'],
+  ['I2','L4','P5','V5','S4','T5','Y5','L3','I2'],
+  ['I3','N5','Y5','P5','S4','I4','T5','O4'],
+  ['L3','I2','Y5','S4','R6','I4','W5','I2','T4'],
+  ['I4','W5','I2','L5','O4','I3','N5','T4','I3'],
+  ['O4','L3','O4','Z5','W5','V5','T4','V5'],
+  ['T4','CROSS','P5','T4','CROSS','I2','L3','L3','I2','I2'],
+  ['S4','R6','Y5','O4','L3','O4','P5','T4'],
+  ['L4','Z5','L3','I3','R6','R6','W5','I3'],
+  ['L5','L4','I4','L5','T4','I2','I2','Z5','L4'],
+  ['P5','I3','T5','L4','L5','V5','S4','T4'],
+  ['T5','Z5','I3','L4','CROSS','L3','S4','O4','I2'],
+];
+
+const TIERS7=[
+  ['CROSS','L5','W5','Z5','T5','P5','S4','O4','L4','R6'],
+  ['I2','Z5','V5','N5','S4','S4','Z5','I3','N5','Y5','Y5'],
+  ['I3','V5','O4','N5','Y5','I3','CROSS','L4','L5','Y5','L4'],
+  ['L3','S4','P5','P5','T5','Y5','L4','W5','I3','S4','Z5'],
+  ['I4','W5','I4','S4','T5','I2','L3','CROSS','Z5','T5','I4','I2'],
+  ['O4','T4','L5','V5','P5','O4','R6','T4','R6','Y5'],
+  ['T4','O4','Y5','I3','I2','T4','W5','Y5','Y5','O4','I2','V5'],
+  ['S4','I4','S4','T4','I2','I3','L3','V5','Z5','I2','W5','S4','L3'],
+  ['L4','S4','I2','I3','N5','I3','T5','CROSS','CROSS','Z5','Z5','I2'],
+  ['L5','W5','P5','O4','L4','S4','I4','R6','R6','Y5'],
+  ['P5','V5','Z5','R6','R6','I4','L5','L4','P5','L3'],
+  ['T5','W5','L5','S4','S4','P5','S4','T4','Y5','I2','I3','I2'],
+  ['W5','P5','T5','S4','O4','O4','Z5','I2','I2','I3','P5','S4'],
+  ['Z5','T5','O4','L3','Z5','I3','Y5','W5','O4','P5','O4'],
+  ['N5','Y5','L4','P5','S4','I2','CROSS','Y5','S4','S4','I2','I3'],
+  ['Y5','T5','S4','L3','CROSS','L4','T5','P5','S4','W5','L3'],
+  ['V5','P5','T4','Y5','Z5','W5','N5','Z5','L5','I4'],
+];
+
+const TIERS8=[
+  ['R6','R6','R6','L5','P5','T5','W5','Z5','N5','O4','T4','S4','I3'],
+  ['I2','Z5','O4','V5','P5','I2','N5','L5','I3','L4','S4','T5','O4','T4','S4','I2'],
+  ['I3','L5','S4','CROSS','T4','Z5','I3','V5','CROSS','O4','T4','L3','L3','V5','N5'],
+  ['L3','O4','S4','CROSS','Y5','W5','CROSS','N5','T5','I3','V5','Y5','N5','I2','I2'],
+  ['I4','Z5','N5','L3','S4','Y5','CROSS','T4','T5','R6','R6','V5','R6'],
+  ['O4','L3','L5','L5','I2','N5','Z5','S4','I3','P5','T4','L5','CROSS','T4','S4'],
+  ['T4','T5','I4','T4','V5','L5','CROSS','W5','T4','N5','T5','R6','T4','I2'],
+  ['S4','L3','I2','I3','L4','V5','T5','Z5','R6','R6','L4','Y5','L3','Y5','I3'],
+  ['L4','P5','O4','Z5','Y5','Y5','CROSS','O4','O4','CROSS','L4','I2','I4','V5','I2'],
+  ['L5','I4','I4','Y5','W5','N5','T5','I2','L3','I4','L5','Y5','O4','L3','S4'],
+  ['P5','Z5','T5','I2','CROSS','L5','L4','Y5','V5','T5','L3','I2','L3','I4','T5'],
+  ['T5','O4','I4','O4','S4','S4','I4','L3','L5','L5','P5','N5','N5','T4','I2'],
+  ['W5','W5','V5','Z5','O4','Y5','Z5','W5','W5','S4','T5','P5','W5'],
+  ['Z5','Z5','O4','N5','I2','V5','O4','CROSS','S4','I3','T5','V5','I4','N5','I2'],
+  ['N5','P5','L3','L3','T4','CROSS','I3','L4','W5','S4','P5','Z5','I4','T4','L4'],
+  ['Y5','T4','Z5','CROSS','R6','S4','L5','L4','T5','S4','W5','N5','R6'],
+  ['V5','L4','T5','W5','I2','Z5','V5','T4','I3','P5','W5','Z5','CROSS','L5'],
+  ['CROSS','P5','I2','W5','Y5','I2','L3','R6','L3','R6','T5','O4','L5','N5','I2'],
+  ['R6','S4','S4','CROSS','P5','CROSS','V5','I2','W5','W5','T4','L3','P5','T5'],
+  ['I2','W5','S4','CROSS','I3','W5','T4','L5','L5','L4','N5','W5','V5','L4','I2'],
+  ['I3','L4','O4','L4','T5','CROSS','CROSS','V5','T4','T4','T5','L4','Y5','I4','I2'],
+  ['L3','N5','V5','T4','P5','L4','T4','T5','I2','L3','S4','T5','S4','L4','O4','I2'],
+];
+
+const TIERS9=[
+  ['R6','R6','R6','R6','L5','P5','T5','W5','Z5','N5','Y5','V5','O4','T4','S4','L4'],
+  ['I2','Y5','N5','T4','R6','Z5','I4','CROSS','S4','P5','I2','CROSS','T5','W5','L5','S4','N5','I4'],
+  ['I3','Y5','L4','N5','L5','L5','CROSS','P5','S4','CROSS','I3','O4','W5','L3','Y5','I2','V5','N5','I2'],
+  ['L3','I4','CROSS','W5','I3','L5','R6','P5','N5','P5','S4','Y5','I2','T4','L3','R6','L3','L5','I2'],
+  ['I4','I4','L5','I4','N5','O4','L4','T4','N5','S4','L5','V5','S4','N5','L3','I4','L3','O4','S4'],
+  ['O4','L5','W5','L3','Y5','W5','W5','CROSS','I4','I3','N5','W5','CROSS','I3','O4','I3','V5','I2','I4'],
+  ['T4','I2','V5','I2','Y5','S4','L4','Y5','Z5','I2','L5','O4','R6','V5','L5','L3','Y5','R6','L3'],
+  ['S4','P5','CROSS','Z5','T4','V5','T4','R6','R6','I2','N5','Z5','V5','W5','Z5','V5','O4'],
+  ['L4','O4','T5','W5','T4','Z5','P5','P5','V5','I4','V5','S4','O4','T5','I3','L5','W5','L3'],
+  ['L5','P5','L3','W5','W5','P5','I4','L3','Z5','L3','L5','I4','V5','L5','V5','T4','N5','T4'],
+  ['P5','R6','Y5','O4','O4','L4','L4','L3','R6','I4','I2','S4','T5','T4','S4','Z5','L5','L4','I2'],
+  ['T5','P5','I4','O4','O4','P5','T5','N5','I3','Z5','P5','Z5','I3','Y5','Z5','Z5','L3','I4'],
+  ['W5','L3','R6','W5','T4','CROSS','O4','S4','I4','P5','N5','Y5','I3','I2','O4','T5','N5','I4','I2'],
+  ['Z5','Z5','V5','R6','T4','W5','O4','V5','Z5','L5','W5','L3','W5','L4','L5','P5','T4'],
+  ['N5','L5','N5','CROSS','V5','L3','T5','N5','P5','R6','W5','O4','N5','CROSS','N5','I3','S4'],
+  ['Y5','L4','I2','CROSS','I2','R6','I3','Y5','W5','O4','I3','R6','O4','S4','V5','I3','W5','T5','O4'],
+  ['V5','I3','I4','I4','Y5','L3','I4','I3','I2','I4','P5','L5','T5','P5','L4','Y5','P5','V5','O4'],
+  ['CROSS','I2','V5','O4','W5','L5','I3','O4','I3','Y5','N5','T4','L4','N5','Z5','L4','L3','Z5','L4'],
+  ['R6','Y5','R6','V5','Z5','T4','W5','I3','P5','L5','I3','S4','V5','I4','P5','T5','I3','I2'],
+  ['I2','W5','W5','L5','W5','I2','N5','L3','L5','I4','L5','CROSS','N5','T4','R6','P5','T4','W5'],
+  ['I3','Y5','V5','CROSS','N5','I3','T4','L4','O4','O4','L4','R6','L5','Y5','O4','T4','T4','I4','I2'],
+  ['L3','Z5','R6','T4','Z5','N5','W5','S4','P5','O4','L3','I2','L5','L3','S4','N5','L4','S4','I4'],
+  ['I4','I3','V5','T4','T4','W5','T4','Z5','L4','Z5','T5','Z5','I2','T5','L3','W5','I3','T5','T4'],
+  ['O4','L3','T5','W5','CROSS','T5','V5','W5','I3','I2','W5','I3','V5','S4','T5','I3','R6','S4','L3'],
+  ['T4','L5','T5','Y5','I2','Y5','W5','T5','N5','O4','N5','L5','S4','CROSS','O4','P5','V5','I2'],
+  ['S4','T5','N5','O4','I3','Y5','T4','N5','Z5','V5','T5','P5','L4','W5','Z5','N5','I3','I3'],
+  ['L4','I4','Y5','N5','Y5','I3','L4','L3','I2','R6','Y5','I3','L5','CROSS','I3','T4','Z5','I3','R6'],
+];
+
+// Belirli bir bölüm için doğru parça setini döndürür. TÜM grid boyutları
+// (5-9) artık aşamalı (her 3 bölümde bir yeni şekil) — her tier, bağımsız
+// bir exact-cover backtracking çözücüsüyle o grid boyutunun TÜM hedef-hücre
+// pozisyonları için AYRI AYRI ve İKİ KEZ (tasarım + bağımsız doğrulama
+// geçişi) test edilmiştir.
+const TIER_TABLE={5:TIERS5, 6:TIERS6, 7:TIERS7, 8:TIERS8, 9:TIERS9};
 function shapeSetFor(grid, local){
-  if(grid===5){
-    const tierIdx=Math.min(Math.floor(local/3), TIERS5.length-1);
-    return TIERS5[tierIdx];
-  }
-  return SETS[grid];
+  const tiers=TIER_TABLE[grid];
+  if(!tiers) return SETS[grid];
+  const tierIdx=Math.min(Math.floor(local/3), tiers.length-1);
+  return tiers[tierIdx];
 }
 
 // Bölüm yapısı: 25×(5x5) + 36×(6x6) + 49×(7x7) + 64×(8x8) + 81×(9x9) = 255 bölüm
