@@ -2539,13 +2539,14 @@ function updateUserTag(){
 }
 
 // ── Kullanıcı adı modalı ──
-async function askUsername(){
+async function askUsername(forced){
   const modal=document.getElementById('nameModal');
   const input=document.getElementById('nameInput');
   const err=document.getElementById('nameErr');
   const okBtn=document.getElementById('nameOkBtn');
   const backBtn=document.getElementById('nameBackBtn');
   modal.classList.add('show');
+  backBtn.style.display=forced?'none':''; // zorunlu ilk açılış ekranında geri/atla seçeneği yok
   err.textContent='';
   err.classList.remove('offlineErr');
   okBtn.textContent=T('startBtn');
@@ -2596,7 +2597,7 @@ async function askUsername(){
       resolve({cancelled:true});
     }
     okBtn.onclick=submit;
-    backBtn.onclick=goBack;
+    backBtn.onclick=forced?null:goBack;
     input.onkeydown=e=>{if(e.key==='Enter')submit();};
   });
 }
@@ -3130,6 +3131,70 @@ checkStreakValidity();
 updateStreakUI();
 
 if(USERNAME){ updateUserTag(); saveScore(); }
+
+// İlk açılışta gösterilecek kullanıcı adı ekranından ÖNCE bağlantıyı
+// kontrol eder; offline ise isim girişini gizleyip net bir "internet
+// gerekli" mesajıyla "Tekrar Dene" döngüsüne sokar. Bağlantı sağlanınca
+// normal (zorunlu) askUsername(true) akışına geçer.
+async function waitForOnlineThenAskUsername(){
+  const modal=document.getElementById('nameModal');
+  const input=document.getElementById('nameInput');
+  const err=document.getElementById('nameErr');
+  const okBtn=document.getElementById('nameOkBtn');
+  const backBtn=document.getElementById('nameBackBtn');
+
+  modal.classList.add('show');
+  backBtn.style.display='none';
+  input.style.display='none'; // bağlantı sağlanana kadar isim girişi gizli
+  err.textContent='';
+  err.classList.remove('offlineErr');
+  okBtn.disabled=true;
+  okBtn.textContent=T('checkingBtn');
+
+  let online=await checkOnline();
+  while(!online){
+    err.textContent=T('offlineRequired');
+    err.classList.add('offlineErr');
+    okBtn.disabled=false;
+    okBtn.textContent=T('retryBtn');
+    await new Promise(resolve=>{
+      okBtn.onclick=()=>{
+        okBtn.disabled=true;
+        okBtn.textContent=T('checkingBtn');
+        resolve();
+      };
+    });
+    online=await checkOnline();
+  }
+
+  input.style.display='';
+  err.textContent='';
+  err.classList.remove('offlineErr');
+  return askUsername(true);
+}
+
+// ── ZORUNLU İLK AÇILIŞ: kullanıcı adı ekranı ──
+// Uygulama GERÇEKTEN ilk kez açılıyorsa (bu cihazda daha önce hiç
+// işlenmemişse), ana menü yerine DOĞRUDAN ve ATLANAMAZ şekilde kullanıcı
+// adı ekranını göster. Kullanıcı adı oluşturulunca ana menüye geçilir.
+// Bu bayrak SADECE BİR KEZ tetiklenir — daha sonra "Yeni Oyun" ile anonim
+// oynayan dönen kullanıcılar bu ekranla tekrar KARŞILAŞMAZ.
+// İnternet bağlantısı ZORUNLUDUR (offline kullanıcı adı oluşturulamaz) ve
+// registerUser() zaten her kullanıcı adının benzersiz olmasını (Firestore'da
+// 'user:<isim>' dokümanı üzerinden) garanti eder.
+(async function handleFirstEverOpen(){
+  if(localStorage_get('pz_first_open_handled')) return; // zaten işlenmiş, hiçbir şey yapma
+  localStorage_set('pz_first_open_handled','1');
+  if(USERNAME) return; // bir şekilde zaten kullanıcı adı varsa (ör. eski veri) atla
+
+  document.getElementById('mainMenu').classList.remove('show');
+  const res = await waitForOnlineThenAskUsername();
+  if(res && !res.cancelled){
+    logAnalyticsEvent('first_open_username_created', {});
+  }
+  document.getElementById('mainMenu').classList.add('show');
+  refreshMenuButtons();
+})();
 
 // Bağlantı durumunu başlangıçta ve periyodik olarak kontrol et
 // (offline göstergesi ve bir sonraki bölüm-sonu davranışı için).
