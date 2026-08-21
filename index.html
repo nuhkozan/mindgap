@@ -324,8 +324,10 @@ button:disabled{opacity:.35;cursor:default}
 .titleUpReward{font-size:clamp(.75rem,3vw,.92rem);color:#fff2cc;font-weight:700}
 </style>
 <!-- Firebase (Firestore) — merkezi kullanıcı adı / skor / liderlik verisi için -->
+<!-- Firebase Analytics — günlük aktif kullanıcı / yeni kullanıcı / oturum istatistikleri için -->
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-analytics-compat.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyBMcuXyZBDCuZ8ZiqKsheh41LqUyWDU5b8",
@@ -339,6 +341,20 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+
+// Analytics başlatma HER ZAMAN try/catch içinde — bazı WebView/ağ
+// koşullarında (ör. ölçüm isteği engellenmişse) analytics.() çağrısı
+// hata verebilir; bu durum oyunun geri kalanını ASLA etkilememeli.
+let ANALYTICS=null;
+try{ ANALYTICS=firebase.analytics(); }catch(e){ console.error('Analytics başlatılamadı:',e); }
+
+// Tüm özel olay kayıtları bu fonksiyon üzerinden geçer — Analytics
+// kullanılamıyorsa (ANALYTICS=null) sessizce hiçbir şey yapmaz, oyunun
+// akışını asla bloklamaz veya hataya düşürmez.
+function logAnalyticsEvent(name, params){
+  if(!ANALYTICS) return;
+  try{ ANALYTICS.logEvent(name, params||{}); }catch(e){}
+}
 </script>
 </head>
 <body>
@@ -768,6 +784,25 @@ function bbOf(cells){
   return{rows:Math.max(...cells.map(([r])=>r))+1,
          cols:Math.max(...cells.map(([,c])=>c))+1};
 }
+// Bir parçanın OLASI TÜM dönüşlerindeki (8 yönelim) en büyük satır/sütun
+// boyutunu döndürür — parça döndürülünce (ör. 4×2 → 2×4) tepsideki PAYLAŞILAN
+// hücre boyutunun değişip TÜM parçaların aniden büyüyüp küçülmesini önlemek
+// için kullanılır. Her farklı şekil tanımı için bir kez hesaplanıp önbelleğe
+// alınır (performans).
+const _maxBBoxCache=new Map();
+function maxBBoxOf(baseCells){
+  const key=JSON.stringify(baseCells);
+  if(_maxBBoxCache.has(key)) return _maxBBoxCache.get(key);
+  let maxRows=0, maxCols=0;
+  for(let ori=0; ori<8; ori++){
+    const bb=bbOf(orientCells(baseCells, ori));
+    maxRows=Math.max(maxRows, bb.rows);
+    maxCols=Math.max(maxCols, bb.cols);
+  }
+  const result={rows:maxRows, cols:maxCols};
+  _maxBBoxCache.set(key, result);
+  return result;
+}
 function getEv(e){
   if(e.touches&&e.touches.length) return{x:e.touches[0].clientX,y:e.touches[0].clientY};
   if(e.changedTouches&&e.changedTouches.length) return{x:e.changedTouches[0].clientX,y:e.changedTouches[0].clientY};
@@ -943,9 +978,13 @@ function buildTray(){
   const boxW=Math.floor((vw-GAP*(perRow+1))/perRow);
   const boxH=Math.floor((th-GAP*(rows+1))/rows);
 
-  // Hücre boyutu: en büyük parça kutuya sığmalı
-  const maxCols=Math.max(...ids.map(id=>bbOf(pieces[id].cells).cols));
-  const maxRows=Math.max(...ids.map(id=>bbOf(pieces[id].cells).rows));
+  // Hücre boyutu: en büyük parça kutuya sığmalı. ÖNEMLİ: parçanın ŞU ANKİ
+  // (döndürülmüş) sınırlayıcı kutusu değil, o parçanın OLASI TÜM
+  // dönüşlerindeki en büyük kutusu kullanılıyor — aksi hâlde bir parçayı
+  // döndürmek (ör. 4×2 → 2×4) paylaşılan cellSz'i değiştirip TÜM tepsinin
+  // aniden büyüyüp küçülmesine yol açıyordu.
+  const maxCols=Math.max(...ids.map(id=>maxBBoxOf(pieces[id].def.cells).cols));
+  const maxRows=Math.max(...ids.map(id=>maxBBoxOf(pieces[id].def.cells).rows));
   const cellSz=Math.max(8,Math.min(
     Math.floor((boxW-BOX_PAD*2)/maxCols),
     Math.floor((boxH-BOX_PAD*2)/maxRows)
@@ -1253,6 +1292,15 @@ async function checkWin(){
   // her zaman kaydedilir), ama PUAN/IQ/ÜNVAN/SIRALAMA sadece kullanıcı adı
   // TANIMLI ve merkezi storage'a ERİŞİLEBİLİRSE (online) işlenir.
   const isFirstTime=markLevelCompleted(LEVEL); // true = ilk kez çözülüyor
+  // Analytics: bölüm tamamlama — hangi bölümde oyuncuların takıldığı/bıraktığı
+  // (drop-off) Firebase Console'da funnel olarak görülebilsin diye standart
+  // 'level_end' olayını kullanıyoruz.
+  logAnalyticsEvent('level_end', {
+    level_name: String(LEVEL+1),
+    success: 1,
+    via_ad: SOLVED_VIA_AD ? 1 : 0,
+    first_time: isFirstTime ? 1 : 0
+  });
   // Reklamla (ya da reklam gelmediği için otomatik) çözülen bölümler bölüm
   // ilerlemesini/navigasyonu engellemez ama puan/IQ/ünvan KAZANDIRMAZ.
   const countsForProgress = isFirstTime && !SOLVED_VIA_AD;
@@ -1900,6 +1948,7 @@ window.onRewardEarned=function(){
   if(adAlreadyHandled){ endAdSession(); return; } // zaman aşımıyla zaten çözülmüş, geç kalan ödül
   adAlreadyHandled=true;
   endAdSession();
+  logAnalyticsEvent('watch_rewarded_ad', {level_name: String(LEVEL+1), completed: 1});
   if(LEVEL!==adRequestedLevel) return; // kullanıcı reklam gösterilirken başka bölüme geçmiş olamaz ama yine de güvenlik ağı
   solveAfterAd();
 };
@@ -1952,6 +2001,7 @@ function loadLevel(){
   const info=levelInfo(LEVEL);
   GRID=info.grid;EMPTY_R=info.emptyR;EMPTY_C=info.emptyC;CELL_NUM=info.cellNum;
   CURRENT_SHAPE_SET=shapeSetFor(GRID, info.local);
+  logAnalyticsEvent('level_start', {level_name: String(LEVEL+1)});
 
   // State sıfırla
   Object.keys(pieces).forEach(k=>delete pieces[k]);
@@ -2531,6 +2581,7 @@ async function askUsername(){
       const isDifferentUser = previousUser!==name; // aynı ismi tekrar girmiyor
       if(isDifferentUser){
         resetLocalPlayerState(true); // eski oyuncunun ilerlemesini + demo bayrağını sıfırla
+        logAnalyticsEvent('sign_up', {method:'guest_username'});
       }
 
       USERNAME=name;
