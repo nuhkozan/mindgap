@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MIND GAP — İstatistikler</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:16px;background:#060b12;color:#dff6ff;
+    font-family:-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh}
+  h1{font-size:1.3rem;color:#00e8ff;text-shadow:0 0 10px rgba(0,220,255,.5);margin:0 0 4px}
+  .sub{color:#8fb8d0;font-size:.85rem;margin-bottom:18px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:22px}
+  .card{background:rgba(0,180,255,.06);border:1px solid rgba(0,220,255,.25);
+    border-radius:12px;padding:14px}
+  .card .label{font-size:.72rem;color:#8fb8d0;font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+  .card .value{font-size:1.6rem;font-weight:800;color:#ffd040;margin-top:4px}
+  section{margin-bottom:26px}
+  h2{font-size:1rem;color:#00e8ff;border-bottom:1px solid rgba(0,220,255,.2);padding-bottom:6px}
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06)}
+  th{color:#8fb8d0;font-weight:600}
+  .bar-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:.8rem}
+  .bar-label{width:90px;flex-shrink:0;color:#8fb8d0}
+  .bar-track{flex:1;background:rgba(255,255,255,.05);border-radius:4px;height:16px;position:relative;overflow:hidden}
+  .bar-fill{height:100%;background:linear-gradient(90deg,#00c8ff,#00ffcc);border-radius:4px}
+  .bar-count{width:36px;text-align:right;color:#dff6ff;font-weight:700}
+  #status{color:#8fb8d0;font-size:.9rem}
+  .note{font-size:.75rem;color:#607080;margin-top:6px;line-height:1.4}
+  .err{color:#ff5060;font-weight:600}
+</style>
+</head>
+<body>
+  <h1>📊 MIND GAP — İstatistikler</h1>
+  <div class="sub">shared_kv koleksiyonundan hesaplanan anlık özet (Firebase Analytics'ten BAĞIMSIZ, geriye dönük tahmini veri)</div>
+  <div id="status">Yükleniyor…</div>
+  <div id="report" style="display:none">
+
+    <div class="grid">
+      <div class="card"><div class="label">Toplam kayıtlı kullanıcı</div><div class="value" id="totalUsers">-</div></div>
+      <div class="card"><div class="label">Son 24 saatte aktif</div><div class="value" id="active1d">-</div></div>
+      <div class="card"><div class="label">Son 7 günde aktif</div><div class="value" id="active7d">-</div></div>
+      <div class="card"><div class="label">Son 30 günde aktif</div><div class="value" id="active30d">-</div></div>
+      <div class="card"><div class="label">Ortalama IQ</div><div class="value" id="avgIq">-</div></div>
+      <div class="card"><div class="label">Ortalama puan</div><div class="value" id="avgScore">-</div></div>
+    </div>
+
+    <section>
+      <h2>Son aktivite dağılımı (gün önce)</h2>
+      <div id="activityBars"></div>
+      <div class="note">Not: Firestore'da "kayıt tarihi" alanı tutulmuyor, sadece "son güncelleme" (t) tutuluyor —
+      her bölüm tamamlandığında/uygulama açıldığında bu alan güncellenir. Bu grafik, kullanıcıların
+      en son NE ZAMAN aktif olduğunu gösterir; "hangi gün kaç yeni kullanıcı geldi" sorusuna kesin cevap veremez
+      (o veri artık Firebase Analytics ile bugünden itibaren toplanıyor).</div>
+    </section>
+
+    <section>
+      <h2>En yüksek puanlı 15 oyuncu</h2>
+      <table>
+        <thead><tr><th>#</th><th>İsim</th><th>Ünvan seviyesi (earnedLevel)</th><th>IQ</th><th>Puan</th></tr></thead>
+        <tbody id="topTable"></tbody>
+      </table>
+    </section>
+
+  </div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBMcuXyZBDCuZ8ZiqKsheh41LqUyWDU5b8",
+  authDomain: "mindgap-c51b7.firebaseapp.com",
+  databaseURL: "https://mindgap-c51b7-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "mindgap-c51b7",
+  storageBucket: "mindgap-c51b7.firebasestorage.app",
+  messagingSenderId: "712682738039",
+  appId: "1:712682738039:web:0ea244284184c36ebc5172",
+  measurementId: "G-H0QKEZ8WZ1"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const statusEl = document.getElementById('status');
+
+async function run(){
+  try{
+    const prefix='score:';
+    const snap = await db.collection('shared_kv')
+      .where(firebase.firestore.FieldPath.documentId(), '>=', prefix)
+      .where(firebase.firestore.FieldPath.documentId(), '<', prefix+'\uf8ff')
+      .get();
+
+    const entries=[];
+    snap.forEach(doc=>{
+      try{
+        const raw = doc.data().value;
+        if(!raw) return;
+        const d = JSON.parse(raw);
+        if(d && d.name) entries.push(d);
+      }catch(e){}
+    });
+
+    if(!entries.length){
+      statusEl.innerHTML = '<span class="err">Hiç kayıt bulunamadı (koleksiyon boş ya da erişim engellendi).</span>';
+      return;
+    }
+
+    const now = Date.now();
+    const DAY = 86400000;
+
+    const active1d = entries.filter(e => (now - (e.t||0)) < 1*DAY).length;
+    const active7d = entries.filter(e => (now - (e.t||0)) < 7*DAY).length;
+    const active30d = entries.filter(e => (now - (e.t||0)) < 30*DAY).length;
+
+    const avgIq = entries.reduce((s,e)=>s+(Number(e.iq)||0),0) / entries.length;
+    const avgScore = entries.reduce((s,e)=>s+(Number(e.score)||0),0) / entries.length;
+
+    document.getElementById('totalUsers').textContent = entries.length;
+    document.getElementById('active1d').textContent = active1d;
+    document.getElementById('active7d').textContent = active7d;
+    document.getElementById('active30d').textContent = active30d;
+    document.getElementById('avgIq').textContent = avgIq.toFixed(1);
+    document.getElementById('avgScore').textContent = Math.round(avgScore);
+
+    // Aktivite dağılımı: bugün / dün / 2-3 gün / 4-7 gün / 8-14 gün / 15-30 gün / 30+ gün
+    const buckets = [
+      {label:'Bugün', test:d=>d<1},
+      {label:'Dün', test:d=>d>=1&&d<2},
+      {label:'2-3 gün', test:d=>d>=2&&d<4},
+      {label:'4-7 gün', test:d=>d>=4&&d<8},
+      {label:'8-14 gün', test:d=>d>=8&&d<15},
+      {label:'15-30 gün', test:d=>d>=15&&d<31},
+      {label:'30+ gün', test:d=>d>=31},
+    ];
+    const counts = buckets.map(b=>({
+      label:b.label,
+      count: entries.filter(e=>b.test((now-(e.t||0))/DAY)).length
+    }));
+    const maxCount = Math.max(1, ...counts.map(c=>c.count));
+    const barsEl = document.getElementById('activityBars');
+    barsEl.innerHTML = counts.map(c => `
+      <div class="bar-row">
+        <div class="bar-label">${c.label}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(c.count/maxCount*100).toFixed(1)}%"></div></div>
+        <div class="bar-count">${c.count}</div>
+      </div>
+    `).join('');
+
+    // En yüksek puanlı 15
+    const top15 = [...entries].sort((a,b)=>(b.score||0)-(a.score||0)).slice(0,15);
+    document.getElementById('topTable').innerHTML = top15.map((e,i)=>`
+      <tr>
+        <td>${i+1}</td>
+        <td>${escHtml(e.name)}</td>
+        <td>${e.earnedLevel!=null ? e.earnedLevel : '-'}</td>
+        <td>${e.iq!=null ? e.iq : '-'}</td>
+        <td>${e.score!=null ? e.score : '-'}</td>
+      </tr>
+    `).join('');
+
+    statusEl.style.display='none';
+    document.getElementById('report').style.display='block';
+  }catch(err){
+    statusEl.innerHTML = '<span class="err">Hata: '+escHtml(String(err.message||err))+'</span>';
+  }
+}
+
+function escHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+run();
+</script>
+</body>
+</html>
