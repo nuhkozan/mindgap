@@ -2945,7 +2945,7 @@ async function showLeaderboard(){
     const earnedLvl=(typeof d.earnedLevel==='number')?d.earnedLevel:(Number(d.level)||0);
     const titleTxt=titleFor(earnedLvl);
     row.innerHTML=`<span class="rank">${medal}</span>
-      <span class="name">${escHtml(d.name)}<br><span class="title">${escHtml(titleTxt)} • 🧠 IQ ${Number(d.iq)||85}</span></span>
+      <span class="name">${escHtml(d.name)}<br><span class="title">${escHtml(titleTxt)} • 🧠 IQ ${Number(d.iq)||85} • 🎯 ${T('lvl')} ${earnedLvl+1}</span></span>
       <span class="score">⭐ ${Number(d.score)||0}</span>`;
     return row;
   }
