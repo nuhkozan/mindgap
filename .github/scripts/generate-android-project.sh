@@ -205,7 +205,7 @@ cat > "$PROJ/app/src/main/res/values-en/strings.xml" << EOF
 <resources>
     <string name="reminder_channel_name">Daily Reminder</string>
     <string name="reminder_title">🧠 Your brain is waiting!</string>
-    <string name="reminder_body">Don't break your streak — solve one more puzzle today.</string>
+    <string name="reminder_body">Don\'t break your streak — solve one more puzzle today.</string>
 </resources>
 EOF
 
