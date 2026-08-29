@@ -28,8 +28,8 @@ LAUNCH_URL="https://nuhkozan.github.io/mindgap/"
 PATH_PREFIX="/mindgap/"
 THEME_COLOR="#060A10"
 BG_COLOR="#060A10"
-VERSION_NAME="1.1.2"
-VERSION_CODE="4"
+VERSION_NAME="1.2.0"
+VERSION_CODE="5"
 ICON_URL="https://nuhkozan.github.io/mindgap/icons/icon-512.png"
 
 # ── AdMob ──
@@ -134,6 +134,7 @@ cat > "$PROJ/app/src/main/AndroidManifest.xml" << EOF
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -158,6 +159,14 @@ cat > "$PROJ/app/src/main/AndroidManifest.xml" << EOF
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Sunucusuz, tamamen cihaz-üzerinde günlük "geri dön" hatırlatması.
+             Kullanıcı uygulamadan çıkınca ~24 saat sonrası için planlanır;
+             tekrar açarsa iptal edilir. Firebase Cloud Functions / ücretli
+             plan / push sunucusu GEREKTİRMEZ. -->
+        <receiver
+            android:name="com.mindgap.app.ReminderReceiver"
+            android:exported="false" />
     </application>
 </manifest>
 EOF
@@ -176,13 +185,60 @@ cat > "$PROJ/app/src/main/res/values/styles.xml" << EOF
 </resources>
 EOF
 
-# ---------- strings.xml ----------
+# ---------- strings.xml (varsayılan: Türkçe) ----------
 cat > "$PROJ/app/src/main/res/values/strings.xml" << EOF
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">$APP_NAME</string>
     <string name="launch_url">$LAUNCH_URL</string>
     <string name="admob_rewarded_ad_unit_id">$ADMOB_REWARDED_AD_UNIT_ID</string>
+    <string name="reminder_channel_name">Günlük Hatırlatma</string>
+    <string name="reminder_title">🧠 Beynin seni bekliyor!</string>
+    <string name="reminder_body">Serini bozma — bugün bir bulmaca daha çöz.</string>
+</resources>
+EOF
+
+# ---------- strings.xml (İngilizce) ----------
+mkdir -p "$PROJ/app/src/main/res/values-en"
+cat > "$PROJ/app/src/main/res/values-en/strings.xml" << EOF
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="reminder_channel_name">Daily Reminder</string>
+    <string name="reminder_title">🧠 Your brain is waiting!</string>
+    <string name="reminder_body">Don't break your streak — solve one more puzzle today.</string>
+</resources>
+EOF
+
+# ---------- strings.xml (İspanyolca) ----------
+mkdir -p "$PROJ/app/src/main/res/values-es"
+cat > "$PROJ/app/src/main/res/values-es/strings.xml" << EOF
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="reminder_channel_name">Recordatorio diario</string>
+    <string name="reminder_title">🧠 ¡Tu cerebro te espera!</string>
+    <string name="reminder_body">No rompas tu racha — resuelve un rompecabezas más hoy.</string>
+</resources>
+EOF
+
+# ---------- strings.xml (Arapça) ----------
+mkdir -p "$PROJ/app/src/main/res/values-ar"
+cat > "$PROJ/app/src/main/res/values-ar/strings.xml" << EOF
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="reminder_channel_name">تذكير يومي</string>
+    <string name="reminder_title">🧠 عقلك في انتظارك!</string>
+    <string name="reminder_body">لا تكسر سلسلتك — حل لغزاً آخر اليوم.</string>
+</resources>
+EOF
+
+# ---------- strings.xml (Rusça) ----------
+mkdir -p "$PROJ/app/src/main/res/values-ru"
+cat > "$PROJ/app/src/main/res/values-ru/strings.xml" << EOF
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="reminder_channel_name">Ежедневное напоминание</string>
+    <string name="reminder_title">🧠 Твой мозг ждёт!</string>
+    <string name="reminder_body">Не теряй серию — реши ещё одну головоломку сегодня.</string>
 </resources>
 EOF
 
@@ -212,8 +268,17 @@ curl -fsSL \
 cat > "$PROJ/app/src/main/java/com/mindgap/app/MainActivity.java" << 'JAVAEOF'
 package com.mindgap.app;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlarmManager;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
@@ -295,6 +360,84 @@ public class MainActivity extends Activity {
         webView.loadUrl(getString(R.string.launch_url));
 
         requestConsentAndInitAds();
+
+        createReminderNotificationChannel();
+        requestNotificationPermissionIfNeeded();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // GÜNLÜK "GERİ DÖN" HATIRLATMASI — tamamen cihaz üzerinde, sunucusuz.
+    // Kullanıcı uygulamadan çıkınca (onPause) ~24 saat sonrası için bir
+    // bildirim planlanır; uygulamayı tekrar açarsa (onResume) o bildirim
+    // iptal edilir. Firebase Cloud Functions / ücretli plan / push
+    // sunucusu gerektirmez — AlarmManager + BroadcastReceiver yeterli.
+    // ═══════════════════════════════════════════════════════
+    private static final String REMINDER_CHANNEL_ID = "mindgap_daily_reminder";
+    private static final int REMINDER_REQUEST_CODE = 4201;
+    private static final long REMINDER_DELAY_MS = 24L * 60 * 60 * 1000; // 24 saat
+
+    private void createReminderNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    REMINDER_CHANNEL_ID,
+                    getString(R.string.reminder_channel_name),
+                    NotificationManager.IMPORTANCE_DEFAULT);
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            if (nm != null) nm.createNotificationChannel(channel);
+        }
+    }
+
+    private void requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 9001);
+            }
+        }
+    }
+
+    private PendingIntent reminderPendingIntent() {
+        Intent intent = new Intent(this, ReminderReceiver.class);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT
+                | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0);
+        return PendingIntent.getBroadcast(this, REMINDER_REQUEST_CODE, intent, flags);
+    }
+
+    /** Kullanıcı uygulamadan ayrılırken çağrılır — ertesi gün için hatırlatma planlar. */
+    private void scheduleReminder() {
+        try {
+            AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            if (am == null) return;
+            long triggerAt = System.currentTimeMillis() + REMINDER_DELAY_MS;
+            // setAndAllowWhileIdle: Doze modunda bile (yaklaşık olarak) tetiklenir.
+            // Tam saniyesinde tetiklenmesi kritik değil — kesin alarm izni
+            // (SCHEDULE_EXACT_ALARM) istemeye gerek yok, "yaklaşık yarın" yeterli.
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, reminderPendingIntent());
+        } catch (Exception e) {
+            // Sessizce vazgeç — hatırlatma opsiyonel bir özellik, oyunu asla bozmamalı.
+        }
+    }
+
+    /** Kullanıcı uygulamayı tekrar açtığında çağrılır — bekleyen hatırlatmayı iptal eder. */
+    private void cancelReminder() {
+        try {
+            AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            if (am != null) am.cancel(reminderPendingIntent());
+        } catch (Exception e) {
+            // yoksay
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        scheduleReminder();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        cancelReminder();
     }
 
     /** Her açılışta çağrılır: rıza durumunu günceller, gerekiyorsa formu gösterir. */
@@ -551,6 +694,42 @@ public class MainActivity extends Activity {
             webView.goBack();
         } else {
             super.onBackPressed();
+        }
+    }
+}
+
+/**
+ * AlarmManager tarafından ~24 saat sonra tetiklenir (kullanıcı uygulamadan
+ * ayrılıp geri dönmediyse). Basit, sunucusuz "geri dön" bildirimi gösterir.
+ */
+class ReminderReceiver extends android.content.BroadcastReceiver {
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        try {
+            Intent launchIntent = new Intent(context, MainActivity.class);
+            launchIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT
+                    | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0);
+            PendingIntent contentIntent = PendingIntent.getActivity(context, 4202, launchIntent, flags);
+
+            android.app.Notification.Builder builder;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                builder = new android.app.Notification.Builder(context, "mindgap_daily_reminder");
+            } else {
+                builder = new android.app.Notification.Builder(context);
+            }
+            builder.setContentTitle(context.getString(context.getResources()
+                            .getIdentifier("reminder_title", "string", context.getPackageName())))
+                    .setContentText(context.getString(context.getResources()
+                            .getIdentifier("reminder_body", "string", context.getPackageName())))
+                    .setSmallIcon(context.getApplicationInfo().icon)
+                    .setAutoCancel(true)
+                    .setContentIntent(contentIntent);
+
+            NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.notify(4203, builder.build());
+        } catch (Exception e) {
+            // Sessizce vazgeç — hatırlatma opsiyonel, hiçbir koşulda crash'e yol açmamalı.
         }
     }
 }
