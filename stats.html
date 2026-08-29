@@ -46,6 +46,26 @@
     </div>
 
     <section>
+      <h2>🟢 Bugün oynayanlar</h2>
+      <table>
+        <thead><tr><th>#</th><th>İsim</th><th>Son aktif saat</th><th>Puan</th><th>IQ</th></tr></thead>
+        <tbody id="todayTable"></tbody>
+      </table>
+      <div class="note" id="todayEmpty" style="display:none">Bugün henüz kimse oynamamış.</div>
+    </section>
+
+    <section>
+      <h2>🔵 Dün oynayanlar</h2>
+      <table>
+        <thead><tr><th>#</th><th>İsim</th><th>Son aktif saat</th><th>Puan</th><th>IQ</th></tr></thead>
+        <tbody id="yesterdayTable"></tbody>
+      </table>
+      <div class="note" id="yesterdayEmpty" style="display:none">Dün kimse oynamamış.</div>
+      <div class="note">Not: "Bugün/Dün", cihazınızın yerel saatine göre takvim günü sınırıyla (00:00-00:00) hesaplanır;
+      basit 24/48 saatlik kayan pencere değildir.</div>
+    </section>
+
+    <section>
       <h2>Son aktivite dağılımı (gün önce)</h2>
       <div id="activityBars"></div>
       <div class="note">Not: Firestore'da "kayıt tarihi" alanı tutulmuyor, sadece "son güncelleme" (t) tutuluyor —
@@ -107,6 +127,40 @@ async function run(){
 
     const now = Date.now();
     const DAY = 86400000;
+
+    // Takvim günü sınırları (cihazın yerel saatine göre 00:00-00:00)
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    const yesterdayStart = new Date(todayStart.getTime() - DAY);
+    const todayStartMs = todayStart.getTime();
+    const yesterdayStartMs = yesterdayStart.getTime();
+
+    const todayPlayers = entries.filter(e => (e.t||0) >= todayStartMs).sort((a,b)=>(b.t||0)-(a.t||0));
+    const yesterdayPlayers = entries.filter(e => (e.t||0) >= yesterdayStartMs && (e.t||0) < todayStartMs).sort((a,b)=>(b.t||0)-(a.t||0));
+
+    function fmtTime(ts){
+      if(!ts) return '-';
+      const d = new Date(ts);
+      return d.toLocaleString('tr-TR', {hour:'2-digit', minute:'2-digit'});
+    }
+    function renderPlayerRows(list, tbodyId, emptyId){
+      const tbody = document.getElementById(tbodyId);
+      if(!list.length){
+        document.getElementById(emptyId).style.display = 'block';
+        tbody.innerHTML = '';
+        return;
+      }
+      tbody.innerHTML = list.map((e,i) => `
+        <tr>
+          <td>${i+1}</td>
+          <td>${escHtml(e.name)}</td>
+          <td>${fmtTime(e.t)}</td>
+          <td>${e.score!=null ? e.score : '-'}</td>
+          <td>${e.iq!=null ? e.iq : '-'}</td>
+        </tr>
+      `).join('');
+    }
+    renderPlayerRows(todayPlayers, 'todayTable', 'todayEmpty');
+    renderPlayerRows(yesterdayPlayers, 'yesterdayTable', 'yesterdayEmpty');
 
     const active1d = entries.filter(e => (now - (e.t||0)) < 1*DAY).length;
     const active7d = entries.filter(e => (now - (e.t||0)) < 7*DAY).length;
