@@ -134,6 +134,20 @@ button:disabled{opacity:.35;cursor:default}
   pointer-events:none;display:none;filter:drop-shadow(0 2px 8px rgba(0,0,0,.7));
   transform:translate(-30%,-20%)}
 #tutHand.show{display:block}
+#tutHand.pokeAnim{animation:handPoke .9s ease-in-out infinite}
+#tutHand.blinkAnim{animation:handBlink .8s ease-in-out infinite}
+@keyframes handPoke{
+  0%,100%{transform:translate(-30%,-20%) scale(1) translateY(0)}
+  50%{transform:translate(-30%,-20%) scale(.82) translateY(12px)}
+}
+@keyframes handBlink{
+  0%,100%{opacity:1}
+  50%{opacity:.15}
+}
+#level1GuideOutline{position:fixed;top:0;left:0;pointer-events:none;z-index:9998}
+.guideCell{position:absolute;border:2.5px dashed #00ffcc;border-radius:6px;
+  box-shadow:0 0 10px rgba(0,255,200,.55);animation:guideCellPulse 1.1s ease-in-out infinite}
+@keyframes guideCellPulse{0%,100%{opacity:.5}50%{opacity:1}}
 #tutMsg{position:fixed;left:50%;transform:translateX(-50%);top:14%;
   background:rgba(0,20,35,.94);border:1px solid #ffd040;color:#ffd040;
   padding:10px 20px;border-radius:12px;font-size:clamp(.72rem,3vw,.9rem);
@@ -405,6 +419,7 @@ function logAnalyticsEvent(name, params){
 <div id="toast"></div>
 <div id="tutHand">👆</div>
 <div id="tutMsg"></div>
+<div id="level1GuideOutline"></div>
 
 <div id="adOverlay">
   <div class="adBox" id="adBox">
@@ -1091,6 +1106,10 @@ function doRotate(p){
   SFX.rotate(); HAPTICS.rotate();
   if(typeof tutorialInteractive!=='undefined' && tutorialInteractive){
     onTutorialPieceRotated();
+  }
+  if(typeof LEVEL1_GUIDE_ACTIVE!=='undefined' && LEVEL1_GUIDE_ACTIVE
+     && LEVEL1_GUIDE_PIECE_ID===p.id && LEVEL1_GUIDE_PHASE==='rotate'){
+    checkLevel1GuideRotation();
   }
 }
 
@@ -2265,25 +2284,35 @@ function finishInteractiveTutorial(){
 // ═══════════════════════════════════════════════════════
 // BÖLÜM 1 REHBERİ — GERÇEK ilk bölümü, oyuncunun KENDİSİNE oynatıyoruz.
 // 1. adım: "İpucu" butonuna basmaya yönlendiriliyor (ilk parça otomatik yerleşir).
-// 2. adım: kalan her parça için, hangi parçayı taşıması gerektiğini
-//    işaretleyip (parlayan çerçeve + el işareti), sürükleyip yerleştirmesini
-//    KENDİSİNİN yapmasını bekliyoruz — biz otomatik oynatmıyoruz.
+// 2. adım: kalan her parça için — gerekiyorsa önce DÖNDÜRME (el işareti
+//    parçanın üstünde yanıp söner), sonra SÜRÜKLEME (el işareti hareketli
+//    "yaklaş-uzaklaş" animasyonuyla dururken, tahtada hedef hücreler kesikli
+//    neon çizgilerle işaretlenir). Oyuncu her adımı KENDİSİ yapar, biz
+//    otomatik oynatmıyoruz — sadece işaret ediyoruz.
 // Sadece gerçekten yeni oyuncularda ve sadece bir kez tetiklenir.
 // ═══════════════════════════════════════════════════════
 let LEVEL1_GUIDE_ACTIVE=false;
 let LEVEL1_GUIDE_PIECE_ID=null;
+let LEVEL1_GUIDE_PHASE=null; // 'rotate' | 'drag'
+let LEVEL1_GUIDE_TARGET=null; // computeSolution()'dan o parçaya ait {ori,cells,gridR,gridC}
 
 function startLevel1Guide(){
   LEVEL1_GUIDE_ACTIVE=true;
   LEVEL1_GUIDE_PIECE_ID=null;
+  LEVEL1_GUIDE_PHASE=null;
+  LEVEL1_GUIDE_TARGET=null;
 
-  // Sadece İpucu (ve gerekirse Sıfırla) etkin kalsın; oyuncu odağı dağılmasın.
-  ['homeBtn','prevBtn','nextBtn','solveBtn'].forEach(id=>{
+  // Sadece İpucu etkin kalsın; oyuncu odağı dağılmasın.
+  ['homeBtn','prevBtn','nextBtn','resetBtn','solveBtn'].forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.disabled=true;
   });
   const hintBtn=document.getElementById('hintBtn');
   if(hintBtn) hintBtn.disabled=false;
+
+  const hand=document.getElementById('tutHand');
+  hand.classList.remove('pokeAnim','blinkAnim');
+  hand.classList.add('blinkAnim'); // buton için de yanıp sönerek dikkat çeksin
 
   const msg=document.getElementById('tutMsg');
   msg.textContent=T('level1GuideHint');
@@ -2301,6 +2330,37 @@ function positionTutHandOnEl(el){
   hand.classList.add('show');
 }
 
+// Hedef parçanın (LEVEL1_GUIDE_TARGET) tahtadaki yerini kesikli neon
+// hücrelerle çizer. Canvas değil, ayrı bir DOM katmanı kullanıyoruz —
+// böylece sürükleme sırasında canvas'a çizilen "hayalet parça" ile
+// hiç çakışmıyor/kapışmıyor.
+function drawLevel1GuideTargetOutline(target){
+  const container=document.getElementById('level1GuideOutline');
+  container.innerHTML='';
+  if(!target) return;
+  const br=boardEl.getBoundingClientRect();
+  target.cells.forEach(([dr,dc])=>{
+    const r=target.gridR+dr, c=target.gridC+dc;
+    const div=document.createElement('div');
+    div.className='guideCell';
+    div.style.left=(br.left+c*CS+2)+'px';
+    div.style.top=(br.top+r*CS+2)+'px';
+    div.style.width=(CS-4)+'px';
+    div.style.height=(CS-4)+'px';
+    container.appendChild(div);
+  });
+}
+function clearLevel1GuideTargetOutline(){
+  const container=document.getElementById('level1GuideOutline');
+  if(container) container.innerHTML='';
+}
+
+// Bir parçanın normalize edilmiş hücre şeklini (dönüşten bağımsız
+// karşılaştırma için) anahtar string'e çevirir.
+function guideCellsKey(cells){
+  return [...cells].sort((a,b)=>a[0]-b[0]||a[1]-b[1]).map(c=>c.join(',')).join(';');
+}
+
 // buildTray() her yeniden çizimde çağırır — rehberdeki hedef parçanın
 // konumu (kalan parça sayısı azaldıkça tepsi yeniden boyutlanır) güncel tutulur.
 function updateLevel1GuidePointer(){
@@ -2311,30 +2371,73 @@ function updateLevel1GuidePointer(){
   const p=pieces[LEVEL1_GUIDE_PIECE_ID];
   if(!p || p.onBoard || !p._box){ return; }
   positionTutHandOnEl(p._box);
+  if(LEVEL1_GUIDE_PHASE==='drag' && LEVEL1_GUIDE_TARGET){
+    drawLevel1GuideTargetOutline(LEVEL1_GUIDE_TARGET);
+  }
 }
 
 // İpucu ile bir parça yerleşince VEYA rehberdeki hedef parça sürüklenip
 // doğru şekilde yerleştirilince çağrılır — sıradaki parçaya geçer.
 function advanceLevel1Guide(){
   if(!LEVEL1_GUIDE_ACTIVE) return;
+  clearLevel1GuideTargetOutline();
   const remaining=Object.values(pieces).filter(p=>!p.onBoard);
   if(!remaining.length){
     finishLevel1Guide();
     return;
   }
+  const solution=computeSolution();
+  if(!solution){ finishLevel1Guide(); return; } // beklenmeyen durum — güvenlik ağı
+
   const next=remaining[0];
+  const target=solution[next.id];
   LEVEL1_GUIDE_PIECE_ID=next.id;
-  const msg=document.getElementById('tutMsg');
-  msg.textContent=T('level1GuideDrag');
-  updateLevel1GuidePointer();
+  LEVEL1_GUIDE_TARGET=target;
+
+  const alreadyCorrectOri = guideCellsKey(next.cells)===guideCellsKey(target.cells);
+  const hand=document.getElementById('tutHand');
+  hand.classList.remove('pokeAnim','blinkAnim');
+
+  if(!alreadyCorrectOri){
+    LEVEL1_GUIDE_PHASE='rotate';
+    hand.classList.add('blinkAnim'); // döndürme: el, parçanın üstünde yanıp söner
+    document.getElementById('tutMsg').textContent=T('level1GuideRotate');
+    updateLevel1GuidePointer();
+  } else {
+    LEVEL1_GUIDE_PHASE='drag';
+    hand.classList.add('pokeAnim'); // sürükleme: el, hareketli yaklaş-uzaklaş animasyonu
+    document.getElementById('tutMsg').textContent=T('level1GuideDrag');
+    updateLevel1GuidePointer();
+  }
+}
+
+// doRotate() içinden çağrılır (sadece rehberdeki hedef parça döndürülünce):
+// artık doğru yönelime gelip gelmediğini kontrol eder.
+function checkLevel1GuideRotation(){
+  if(!LEVEL1_GUIDE_ACTIVE || !LEVEL1_GUIDE_TARGET) return;
+  const p=pieces[LEVEL1_GUIDE_PIECE_ID];
+  if(!p) return;
+  const matches = guideCellsKey(p.cells)===guideCellsKey(LEVEL1_GUIDE_TARGET.cells);
+  if(matches){
+    LEVEL1_GUIDE_PHASE='drag';
+    const hand=document.getElementById('tutHand');
+    hand.classList.remove('blinkAnim');
+    hand.classList.add('pokeAnim');
+    document.getElementById('tutMsg').textContent=T('level1GuideDrag');
+    updateLevel1GuidePointer();
+  }
 }
 
 function finishLevel1Guide(){
   LEVEL1_GUIDE_ACTIVE=false;
   LEVEL1_GUIDE_PIECE_ID=null;
+  LEVEL1_GUIDE_PHASE=null;
+  LEVEL1_GUIDE_TARGET=null;
   localStorage_set('pz_level1_guided_done','1');
-  document.getElementById('tutHand').classList.remove('show');
+  const hand=document.getElementById('tutHand');
+  hand.classList.remove('show','pokeAnim','blinkAnim');
   document.getElementById('tutMsg').classList.remove('show');
+  clearLevel1GuideTargetOutline();
   setFooterEnabled(true);
   document.getElementById('prevBtn').disabled = LEVEL<=0;
   document.getElementById('nextBtn').disabled = LEVEL>=MAX_LEVEL || LEVEL>=TOTAL_LEVELS-1;
@@ -3047,7 +3150,7 @@ const I18N={
     lbTitle:'🏆 Champions League', lbEmpty:'Nobody yet — be the first!', close:'✕ Close', rankUp:'ranks up', rankDown:'ranks down', rankSame:'no change', rankUnavailable:'Ranking unavailable', rankLoading:'🏆 Updating ranking...', rankEntered:'entered the ranking', newTitleLabel:'New Title Unlocked!', currentTitleLabel:'Your Title', offlineRequired:'Internet connection required to create a username', nameTaken:'This username is already taken!', nameTooShort:'Must be at least 3 characters', nameTooLong:'Max 16 characters', nameInvalidChars:'Only letters, numbers and spaces allowed', setUsernameTitle:'👤 Set Username', namePlaceholder:'e.g: BrainKing42', startBtn:'Start ▶', checkingBtn:'Checking...', retryBtn:'⟳ Retry', offlineMode:'Offline — score, IQ & ranking disabled', backBtn:'◀ Back', lbYourRank:'You are #{rank} of {total} players',
     score:'Score', bonusHint:'Bonus hint earned!', newUser:'New Username', newGame:'New Game', continueGame:'Continue', welcomeBack:'Welcome back', alreadySolved:'Already solved — no points', adSolvedNoReward:'Solved via ad — no points or IQ', demoTitle:'Tutorial', demoSub:'Watch how the game works', skipTutorial:'Skip Tutorial', demoWelcome:'👋 Welcome! Let\'s see how it works...', demoDrag:'👆 Hold & drag the piece onto the board', demoComplete:'✅ That\'s it! Now try it yourself',
     tutInteractiveSub:'Now it\'s your turn — try it yourself', tutRotateMsg:'👆 Tap the piece to rotate it', tutDragMsg:'✋ Now drag it onto the board', tutDoneMsg:'🎉 Perfect! You\'ve got it',
-    level1GuideHint:'👆 Tap "Hint" to place your first piece', level1GuideDrag:'✋ Now drag this piece onto the board yourself (tap to rotate it if needed)',
+    level1GuideHint:'👆 Tap "Hint" to place your first piece', level1GuideRotate:'👆 Tap the piece to rotate it into place', level1GuideDrag:'✋ Now drag this piece onto the marked spot',
   },
   tr:{
     play:'Oyna', champ:'Şampiyonlar Ligi', rules:'Oyun Kuralları', levelMap:'Bölüm Haritası', streakDays:'gün seri', privacyOptions:'Gizlilik Tercihleri',
@@ -3067,7 +3170,7 @@ const I18N={
     lbTitle:'🏆 Şampiyonlar Ligi', lbEmpty:'Henüz kimse yok — ilk sen ol!', close:'✕ Kapat', rankUp:'sıra yükseldi', rankDown:'sıra düştü', rankSame:'değişim yok', rankUnavailable:'Sıralama alınamadı', rankLoading:'🏆 Sıralama güncelleniyor...', rankEntered:'sıralamaya girdi', newTitleLabel:'Yeni Ünvan Kazandın!', currentTitleLabel:'Ünvanın', offlineRequired:'Kullanıcı adı oluşturmak için internet bağlantısı gerekli', nameTaken:'Bu kullanıcı adı zaten alınmış!', nameTooShort:'En az 3 karakter olmalı', nameTooLong:'En fazla 16 karakter', nameInvalidChars:'Sadece harf, rakam ve boşluk kullanılabilir', setUsernameTitle:'👤 Kullanıcı Adı Belirle', namePlaceholder:'ör: ZekaKralı42', startBtn:'Başla ▶', checkingBtn:'Kontrol ediliyor...', retryBtn:'⟳ Tekrar Dene', offlineMode:'Çevrimdışı — puan, IQ ve sıralama devre dışı', backBtn:'◀ Geri', lbYourRank:'{total} oyuncu içinde {rank}.\'sisiniz',
     score:'Puan', bonusHint:'Bonus ipucu kazandın!', newUser:'Yeni Kullanıcı Adı', newGame:'Yeni Oyun', continueGame:'Devam Et', welcomeBack:'Tekrar hoş geldin', alreadySolved:'Zaten çözülmüş — puan yok', adSolvedNoReward:'Reklamla çözüldü — puan/IQ yok', demoTitle:'Tanıtım', demoSub:'Oyunun nasıl oynandığını izle', skipTutorial:'Tanıtımı Geç', demoWelcome:'👋 Hoş geldin! Nasıl oynandığına bakalım...', demoDrag:'👆 Parçayı basılı tutup tahtaya sürükle', demoComplete:'✅ İşte bu kadar! Şimdi sıra sende',
     tutInteractiveSub:'Şimdi sıra sende — kendin dene', tutRotateMsg:'👆 Parçaya dokun ve döndür', tutDragMsg:'✋ Şimdi sürükleyip tahtaya yerleştir', tutDoneMsg:'🎉 Harika! Öğrendin',
-    level1GuideHint:'👆 İlk parçayı yerleştirmek için "İpucu"na dokun', level1GuideDrag:'✋ Şimdi bu parçayı kendin sürükleyip tahtaya yerleştir (gerekirse dokunup döndürebilirsin)',
+    level1GuideHint:'👆 İlk parçayı yerleştirmek için "İpucu"na dokun', level1GuideRotate:'👆 Parçaya dokun, doğru yöne döndür', level1GuideDrag:'✋ Şimdi bu parçayı işaretli yere sürükle',
   },
   es:{
     play:'Jugar', champ:'Liga de Campeones', rules:'Cómo Jugar', levelMap:'Mapa de Niveles', streakDays:'días seguidos', privacyOptions:'Opciones de Privacidad',
@@ -3087,7 +3190,7 @@ const I18N={
     lbTitle:'🏆 Liga de Campeones', lbEmpty:'Nadie aún — ¡sé el primero!', close:'✕ Cerrar', rankUp:'subió de puesto', rankDown:'bajó de puesto', rankSame:'sin cambio', rankUnavailable:'Ranking no disponible', rankLoading:'🏆 Actualizando ranking...', rankEntered:'entró al ranking', newTitleLabel:'¡Nuevo Título Desbloqueado!', currentTitleLabel:'Tu Título', offlineRequired:'Se requiere conexión a internet para crear un nombre de usuario', nameTaken:'¡Este nombre de usuario ya está en uso!', nameTooShort:'Debe tener al menos 3 caracteres', nameTooLong:'Máximo 16 caracteres', nameInvalidChars:'Solo letras, números y espacios', setUsernameTitle:'👤 Elegir Nombre de Usuario', namePlaceholder:'ej: ReyMental42', startBtn:'Comenzar ▶', checkingBtn:'Verificando...', retryBtn:'⟳ Reintentar', offlineMode:'Sin conexión — puntos, IQ y ranking desactivados', backBtn:'◀ Atrás', lbYourRank:'Eres el #{rank} de {total} jugadores',
     score:'Puntos', bonusHint:'¡Pista extra ganada!', newUser:'Nuevo Usuario', newGame:'Nuevo Juego', continueGame:'Continuar', welcomeBack:'Bienvenido de nuevo', alreadySolved:'Ya resuelto — sin puntos', adSolvedNoReward:'Resuelto con anuncio — sin puntos ni IQ', demoTitle:'Tutorial', demoSub:'Mira cómo funciona el juego', skipTutorial:'Omitir Tutorial', demoWelcome:'👋 ¡Bienvenido! Veamos cómo funciona...', demoDrag:'👆 Mantén y arrastra la pieza al tablero', demoComplete:'✅ ¡Eso es todo! Ahora inténtalo tú',
     tutInteractiveSub:'Ahora te toca a ti — inténtalo', tutRotateMsg:'👆 Toca la pieza para girarla', tutDragMsg:'✋ Ahora arrástrala al tablero', tutDoneMsg:'🎉 ¡Perfecto! Ya lo tienes',
-    level1GuideHint:'👆 Toca "Pista" para colocar tu primera pieza', level1GuideDrag:'✋ Ahora arrastra tú mismo esta pieza al tablero (tócala para girarla si es necesario)',
+    level1GuideHint:'👆 Toca "Pista" para colocar tu primera pieza', level1GuideRotate:'👆 Toca la pieza para girarla a su posición', level1GuideDrag:'✋ Ahora arrastra esta pieza al lugar marcado',
   },
   ar:{
     play:'العب', champ:'دوري الأبطال', rules:'كيفية اللعب', levelMap:'خريطة المراحل', streakDays:'أيام متتالية', privacyOptions:'خيارات الخصوصية',
@@ -3107,7 +3210,7 @@ const I18N={
     lbTitle:'🏆 دوري الأبطال', lbEmpty:'لا أحد بعد — كن الأول!', close:'✕ إغلاق', rankUp:'ترقية بالترتيب', rankDown:'تراجع بالترتيب', rankSame:'بدون تغيير', rankUnavailable:'الترتيب غير متاح', rankLoading:'🏆 يتم تحديث الترتيب...', rankEntered:'دخل الترتيب', newTitleLabel:'لقب جديد مفتوح!', currentTitleLabel:'لقبك', offlineRequired:'يلزم الاتصال بالإنترنت لإنشاء اسم مستخدم', nameTaken:'اسم المستخدم هذا مُستخدم بالفعل!', nameTooShort:'يجب ألا يقل عن 3 أحرف', nameTooLong:'الحد الأقصى 16 حرفاً', nameInvalidChars:'الأحرف والأرقام والمسافات فقط', setUsernameTitle:'👤 تعيين اسم المستخدم', namePlaceholder:'مثال: ملك٤٢', startBtn:'ابدأ ▶', checkingBtn:'جارٍ التحقق...', retryBtn:'⟳ أعد المحاولة', offlineMode:'غير متصل — النقاط والذكاء والترتيب معطلة', backBtn:'◀ رجوع', lbYourRank:'أنت #{rank} من أصل {total} لاعباً',
     score:'النقاط', bonusHint:'حصلت على تلميح إضافي!', newUser:'اسم مستخدم جديد', newGame:'لعبة جديدة', continueGame:'متابعة', welcomeBack:'مرحباً بعودتك', alreadySolved:'تم حلها مسبقاً — بلا نقاط', adSolvedNoReward:'حُلّت عبر الإعلان — بلا نقاط أو ذكاء', demoTitle:'تعليمي', demoSub:'شاهد كيف تعمل اللعبة', skipTutorial:'تخطي الشرح', demoWelcome:'👋 مرحباً! لنرَ كيف تعمل...', demoDrag:'👆 اضغط مطولاً واسحب القطعة إلى اللوحة', demoComplete:'✅ هذا كل شيء! الآن جرّب بنفسك',
     tutInteractiveSub:'الآن دورك — جرّب بنفسك', tutRotateMsg:'👆 اضغط على القطعة لتدويرها', tutDragMsg:'✋ الآن اسحبها إلى اللوحة', tutDoneMsg:'🎉 ممتاز! لقد أتقنتها',
-    level1GuideHint:'👆 اضغط على "تلميح" لوضع أول قطعة', level1GuideDrag:'✋ الآن اسحب هذه القطعة بنفسك إلى اللوحة (اضغط عليها لتدويرها إذا لزم الأمر)',
+    level1GuideHint:'👆 اضغط على "تلميح" لوضع أول قطعة', level1GuideRotate:'👆 اضغط على القطعة لتدويرها إلى مكانها الصحيح', level1GuideDrag:'✋ الآن اسحب هذه القطعة إلى المكان المُحدد',
   },
   ru:{
     play:'Играть', champ:'Лига Чемпионов', rules:'Как играть', levelMap:'Карта уровней', streakDays:'дней подряд', privacyOptions:'Настройки конфиденциальности',
@@ -3127,7 +3230,7 @@ const I18N={
     lbTitle:'🏆 Лига Чемпионов', lbEmpty:'Пока никого — будь первым!', close:'✕ Закрыть', rankUp:'подъём в рейтинге', rankDown:'падение в рейтинге', rankSame:'без изменений', rankUnavailable:'Рейтинг недоступен', rankLoading:'🏆 Обновление рейтинга...', rankEntered:'попал в рейтинг', newTitleLabel:'Новое звание получено!', currentTitleLabel:'Твоё звание', offlineRequired:'Для создания имени пользователя нужен интернет', nameTaken:'Это имя уже занято!', nameTooShort:'Минимум 3 символа', nameTooLong:'Максимум 16 символов', nameInvalidChars:'Только буквы, цифры и пробелы', setUsernameTitle:'👤 Задать Имя Пользователя', namePlaceholder:'напр: КорольУма42', startBtn:'Начать ▶', checkingBtn:'Проверка...', retryBtn:'⟳ Повторить', offlineMode:'Офлайн — очки, IQ и рейтинг отключены', backBtn:'◀ Назад', lbYourRank:'Вы #{rank} из {total} игроков',
     score:'Очки', bonusHint:'Получена бонусная подсказка!', newUser:'Новый ник', newGame:'Новая игра', continueGame:'Продолжить', welcomeBack:'С возвращением', alreadySolved:'Уже решено — без очков', adSolvedNoReward:'Решено через рекламу — без очков и IQ', demoTitle:'Обучение', demoSub:'Посмотри, как играть', skipTutorial:'Пропустить', demoWelcome:'👋 Добро пожаловать! Посмотрим как это работает...', demoDrag:'👆 Удерживай и тяни фигуру на доску', demoComplete:'✅ Вот и всё! Теперь попробуй сам',
     tutInteractiveSub:'Теперь твоя очередь — попробуй сам', tutRotateMsg:'👆 Нажми на фигуру, чтобы повернуть', tutDragMsg:'✋ Теперь перетащи её на доску', tutDoneMsg:'🎉 Отлично! У тебя получилось',
-    level1GuideHint:'👆 Нажми «Подсказка», чтобы разместить первую фигуру', level1GuideDrag:'✋ Теперь сам перетащи эту фигуру на доску (нажми, чтобы повернуть, если нужно)',
+    level1GuideHint:'👆 Нажми «Подсказка», чтобы разместить первую фигуру', level1GuideRotate:'👆 Нажми на фигуру, чтобы повернуть её в нужное положение', level1GuideDrag:'✋ Теперь перетащи эту фигуру на отмеченное место',
   }
 };
 let LANG=localStorage_get('pz_lang')||'en';
