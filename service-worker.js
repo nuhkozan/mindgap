@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mindgap-v9'; // ⚠️ Her yeni index.html güncellemesinde bu numarayı artır (v10, v11...)
+const CACHE_NAME = 'mindgap-v10'; // ⚠️ Her yeni index.html güncellemesinde bu numarayı artır (v11, v12...)
 const ASSETS = [
   './index.html',
   './manifest.json',
