@@ -2239,7 +2239,7 @@ function startInteractiveTutorial(){
   buildTray();
 
   const msg=document.getElementById('tutMsg');
-  msg.textContent=T('tutRotateMsg');
+  setTutMsg('tutRotateMsg');
   msg.classList.add('show');
   positionTutHandOnPiece();
 }
@@ -2265,7 +2265,7 @@ function positionTutHandOnTarget(){
 // doRotate() içinden çağrılır: oyuncu ilk kez döndürünce sürükleme adımını göster
 function onTutorialPieceRotated(){
   if(!tutorialInteractive) return;
-  document.getElementById('tutMsg').textContent=T('tutDragMsg');
+  setTutMsg('tutDragMsg');
   positionTutHandOnTarget();
 }
 
@@ -2273,12 +2273,23 @@ function onTutorialPieceRotated(){
 function finishInteractiveTutorial(){
   tutorialInteractive=false;
   document.getElementById('tutHand').classList.remove('show');
-  document.getElementById('tutMsg').textContent=T('tutDoneMsg');
+  setTutMsg('tutDoneMsg');
   SFX.win(); HAPTICS.win();
   setTimeout(()=>{
     document.getElementById('tutMsg').classList.remove('show');
     finishIntroDemo();
   },1300);
+}
+
+// Tanıtım/rehber mesaj kutusu (#tutMsg) HER ZAMAN bu fonksiyon üzerinden
+// güncellenmeli — doğrudan .textContent atamak YERİNE. Gösterilen i18n
+// anahtarını hatırlar, böylece kullanıcı tanıtım/rehber SÜRERKEN dili
+// değiştirirse (applyLang() içinde) mesaj doğru dile yeniden çevrilir.
+let CURRENT_TUT_MSG_KEY=null;
+function setTutMsg(key){
+  CURRENT_TUT_MSG_KEY=key;
+  const el=document.getElementById('tutMsg');
+  if(el) el.textContent=T(key);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2315,7 +2326,7 @@ function startLevel1Guide(){
   hand.classList.add('blinkAnim'); // buton için de yanıp sönerek dikkat çeksin
 
   const msg=document.getElementById('tutMsg');
-  msg.textContent=T('level1GuideHint');
+  setTutMsg('level1GuideHint');
   msg.classList.add('show');
   positionTutHandOnEl(hintBtn);
 }
@@ -2401,12 +2412,12 @@ function advanceLevel1Guide(){
   if(!alreadyCorrectOri){
     LEVEL1_GUIDE_PHASE='rotate';
     hand.classList.add('blinkAnim'); // döndürme: el, parçanın üstünde yanıp söner
-    document.getElementById('tutMsg').textContent=T('level1GuideRotate');
+    setTutMsg('level1GuideRotate');
     updateLevel1GuidePointer();
   } else {
     LEVEL1_GUIDE_PHASE='drag';
     hand.classList.add('pokeAnim'); // sürükleme: el, hareketli yaklaş-uzaklaş animasyonu
-    document.getElementById('tutMsg').textContent=T('level1GuideDrag');
+    setTutMsg('level1GuideDrag');
     updateLevel1GuidePointer();
   }
 }
@@ -2423,7 +2434,7 @@ function checkLevel1GuideRotation(){
     const hand=document.getElementById('tutHand');
     hand.classList.remove('blinkAnim');
     hand.classList.add('pokeAnim');
-    document.getElementById('tutMsg').textContent=T('level1GuideDrag');
+    setTutMsg('level1GuideDrag');
     updateLevel1GuidePointer();
   }
 }
@@ -2437,6 +2448,7 @@ function finishLevel1Guide(){
   const hand=document.getElementById('tutHand');
   hand.classList.remove('show','pokeAnim','blinkAnim');
   document.getElementById('tutMsg').classList.remove('show');
+  CURRENT_TUT_MSG_KEY=null;
   clearLevel1GuideTargetOutline();
   setFooterEnabled(true);
   document.getElementById('prevBtn').disabled = LEVEL<=0;
@@ -2529,6 +2541,7 @@ function finishIntroDemo(){
   document.getElementById('demoSkipWrap').classList.remove('show');
   document.getElementById('tutHand').classList.remove('show');
   document.getElementById('tutMsg').classList.remove('show');
+  CURRENT_TUT_MSG_KEY=null;
   setFooterEnabled(true);
   markDemoDone();
   LEVEL=0;
@@ -3238,6 +3251,11 @@ function T(k){return (I18N[LANG]&&I18N[LANG][k])||I18N.tr[k]||k;}
 
 function applyLang(){
   updateOfflineBadge();
+  // Tanıtım/rehber mesaj kutusu şu an bir şey gösteriyorsa, dil değişince
+  // ONU DA doğru dile çevir — aksi hâlde eski dilde donmuş kalırdı.
+  if(typeof CURRENT_TUT_MSG_KEY!=='undefined' && CURRENT_TUT_MSG_KEY){
+    setTutMsg(CURRENT_TUT_MSG_KEY);
+  }
   document.getElementById('mmNewUserTxt') && (document.getElementById('mmNewUserTxt').textContent=T('newUser'));
   document.getElementById('mmContinueTxt') && (document.getElementById('mmContinueTxt').textContent=T('continueGame'));
   document.getElementById('mmNewGameTxt') && (document.getElementById('mmNewGameTxt').textContent=T('newGame'));
@@ -3425,8 +3443,16 @@ async function waitForOnlineThenAskUsername(){
   if(res && !res.cancelled){
     logAnalyticsEvent('first_open_username_created', {});
   }
-  document.getElementById('mainMenu').classList.add('show');
-  refreshMenuButtons();
+  // ÖNEMLİ: mmNewUser'daki normal akışla AYNI mantık — kullanıcı adı
+  // oluşturulunca demo/Bölüm 0 tanıtımı (varsa) tetiklenmeli. Önceki sürümde
+  // bu kontrol unutulmuştu, doğrudan ana menüye atlıyordu — tanıtım ve
+  // Bölüm 0 hiç görünmüyordu.
+  if(res && !res.cancelled && isNewPlayerDemoNeeded()){
+    playIntroDemo();
+  } else {
+    document.getElementById('mainMenu').classList.add('show');
+    refreshMenuButtons();
+  }
 })();
 
 // Bağlantı durumunu başlangıçta ve periyodik olarak kontrol et
