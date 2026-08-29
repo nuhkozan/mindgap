@@ -1119,9 +1119,6 @@ function doRotate(p){
   const isFlip=p.ori>=4;
   showToast(isFlip?'⇋ Ayna + '+(p.ori%4)*90+'°':'↻ '+(p.ori%4)*90+'° döndü');
   SFX.rotate(); HAPTICS.rotate();
-  if(typeof tutorialInteractive!=='undefined' && tutorialInteractive){
-    onTutorialPieceRotated();
-  }
   if(typeof LEVEL1_GUIDE_ACTIVE!=='undefined' && LEVEL1_GUIDE_ACTIVE
      && LEVEL1_GUIDE_PIECE_ID===p.id && LEVEL1_GUIDE_PHASE==='rotate'){
     checkLevel1GuideRotation();
@@ -1305,14 +1302,6 @@ function onBoardDown(e){
 // KAZANMA
 // ═══════════════════════════════════════════════════════
 async function checkWin(){
-  // İNTERAKTİF BÖLÜM 0: gerçek bölüm/puan/IQ akışına asla girmez —
-  // tek parça tahtaya girdiğinde mini-bulmaca biter.
-  if(typeof tutorialInteractive!=='undefined' && tutorialInteractive){
-    const tp=pieces['TUT_L3'];
-    if(tp && tp.onBoard){ finishInteractiveTutorial(); }
-    return;
-  }
-
   const all=Object.values(pieces);
   const placed=all.filter(p=>p.onBoard).length;
   if(placed<all.length){statusEl.textContent='';return;}
@@ -2210,7 +2199,11 @@ async function playIntroDemo(){
   banner.classList.remove('show');
   cursor.classList.remove('show');
 
-  startInteractiveTutorial();
+  // Bölüm 0 (interaktif 2×2 mini-bulmaca) KALDIRILDI — artık gereksiz,
+  // çünkü GERÇEK Bölüm 1'in kendi kapsamlı rehberi var (İpucu yönlendirmesi
+  // + döndürme/sürükleme adım adım işaretleme). İzlenen tanıtım demosu
+  // bitince doğrudan gerçek Bölüm 1'e geçiliyor.
+  finishIntroDemo();
 }
 
 function demoWait(ms){
@@ -2229,78 +2222,11 @@ function demoWait(ms){
 // bir doğrulama kodu yazmaya gerek yok, tahtanın boyutu parçanın
 // bounding-box'ıyla birebir aynı olduğu için tek doğru yönelim/konum var.
 // ═══════════════════════════════════════════════════════
+// Bölüm 0 (interaktif 2×2 mini-bulmaca) KALDIRILDI — artık gereksiz,
+// gerçek Bölüm 1'in kendi kapsamlı rehberi bu işlevi üstleniyor.
+// Bayrak, başka yerlerdeki güvenlik kontrolleri için hâlâ mevcut ama
+// artık hiçbir zaman true olmuyor.
 let tutorialInteractive=false;
-const TUT_GRID=2, TUT_EMPTY_R=1, TUT_EMPTY_C=1; // hedef: sağ-alt köşe — 1 döndürme gerektirir
-
-function startInteractiveTutorial(){
-  tutorialInteractive=true;
-
-  GRID=TUT_GRID; EMPTY_R=TUT_EMPTY_R; EMPTY_C=TUT_EMPTY_C;
-  Object.keys(pieces).forEach(k=>delete pieces[k]);
-  Object.keys(boardMap).forEach(k=>delete boardMap[k]);
-
-  const def=SHAPES.L3;
-  pieces['TUT_L3']={
-    id:'TUT_L3', def, ori:0,
-    cells:def.cells.map(c=>[...c]),
-    onBoard:false, gridR:-1, gridC:-1,
-    _box:null, _cellSz:0
-  };
-
-  lvlBadge.textContent='🎓 '+T('demoTitle');
-  subTxt.textContent=T('tutInteractiveSub');
-  statusEl.textContent='';
-
-  setFooterEnabled(false);
-  document.getElementById('demoSkipWrap').classList.add('show'); // atlama seçeneği burada da geçerli
-
-  setupLayout();
-  drawGrid();
-  renderPlaced();
-  buildTray();
-
-  const msg=document.getElementById('tutMsg');
-  setTutMsg('tutRotateMsg');
-  msg.classList.add('show');
-  positionTutHandOnPiece();
-}
-
-function positionTutHandOnPiece(){
-  const p=pieces['TUT_L3'];
-  const hand=document.getElementById('tutHand');
-  if(!p || !p._box){ hand.classList.remove('show'); return; }
-  const r=p._box.getBoundingClientRect();
-  hand.style.left=(r.left+r.width/2)+'px';
-  hand.style.top=(r.top+r.height/2)+'px';
-  hand.classList.add('show');
-}
-
-function positionTutHandOnTarget(){
-  const hand=document.getElementById('tutHand');
-  const br=boardEl.getBoundingClientRect();
-  hand.style.left=(br.left+CS)+'px';
-  hand.style.top=(br.top+CS)+'px';
-  hand.classList.add('show');
-}
-
-// doRotate() içinden çağrılır: oyuncu ilk kez döndürünce sürükleme adımını göster
-function onTutorialPieceRotated(){
-  if(!tutorialInteractive) return;
-  setTutMsg('tutDragMsg');
-  positionTutHandOnTarget();
-}
-
-// checkWin() içinden çağrılır: interaktif mini-bulmaca çözüldüğünde
-function finishInteractiveTutorial(){
-  tutorialInteractive=false;
-  document.getElementById('tutHand').classList.remove('show');
-  setTutMsg('tutDoneMsg');
-  SFX.win(); HAPTICS.win();
-  setTimeout(()=>{
-    document.getElementById('tutMsg').classList.remove('show');
-    finishIntroDemo();
-  },1300);
-}
 
 // Tanıtım/rehber mesaj kutusu (#tutMsg) HER ZAMAN bu fonksiyon üzerinden
 // güncellenmeli — doğrudan .textContent atamak YERİNE. Gösterilen i18n
