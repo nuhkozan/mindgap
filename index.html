@@ -231,6 +231,8 @@ button:disabled{opacity:.35;cursor:default}
 .modal input:focus{border-color:#00e8ff;box-shadow:0 0 10px rgba(0,220,255,.3)}
 .modal button.primary{font-size:clamp(1.05rem,4.8vw,1.3rem);font-weight:800;padding:14px 20px;
   letter-spacing:.02em}
+.langPickBtn{display:block;width:100%;margin:6px 0;font-size:clamp(1rem,4.4vw,1.2rem);
+  font-weight:700;padding:14px 18px;text-align:center}
 
 /* BÖLÜM HARİTASI */
 .mapCard{width:min(92vw,420px);max-height:82vh}
@@ -464,6 +466,17 @@ function logAnalyticsEvent(name, params){
     <h2 id="rulesTitle">📜 Oyun Kuralları</h2>
     <div id="rulesBody"></div>
     <button id="rulesCloseBtn">✕</button>
+  </div>
+</div>
+
+<div class="modal" id="langPickModal">
+  <div class="card">
+    <h2>🌐 Language / Dil / Idioma / اللغة / Язык</h2>
+    <button class="langPickBtn" data-lang="tr">🇹🇷 Türkçe</button>
+    <button class="langPickBtn" data-lang="en">🇬🇧 English</button>
+    <button class="langPickBtn" data-lang="es">🇪🇸 Español</button>
+    <button class="langPickBtn" data-lang="ar">🇸🇦 العربية</button>
+    <button class="langPickBtn" data-lang="ru">🇷🇺 Русский</button>
   </div>
 </div>
 
@@ -2780,6 +2793,27 @@ function updateUserTag(){
 }
 
 // ── Kullanıcı adı modalı ──
+// İlk açılışta, kullanıcı adı ekranından bile ÖNCE gösterilir — her buton
+// KENDİ dilinde yazılı olduğu için kullanıcı henüz hiçbir metni okuyamasa
+// bile kendi dilini bulabilir. Seçilince LANG hemen uygulanır (applyLang()),
+// böylece sonraki tüm ekranlar (kullanıcı adı, tanıtım, Bölüm 0, Bölüm 1
+// rehberi) baştan itibaren DOĞRU dilde açılır.
+function askLanguagePick(){
+  const modal=document.getElementById('langPickModal');
+  modal.classList.add('show');
+  return new Promise(resolve=>{
+    document.querySelectorAll('.langPickBtn').forEach(btn=>{
+      btn.onclick=()=>{
+        LANG=btn.dataset.lang;
+        localStorage_set('pz_lang',LANG);
+        applyLang();
+        modal.classList.remove('show');
+        resolve();
+      };
+    });
+  });
+}
+
 async function askUsername(forced){
   const modal=document.getElementById('nameModal');
   const input=document.getElementById('nameInput');
@@ -3439,6 +3473,15 @@ async function waitForOnlineThenAskUsername(){
   if(USERNAME) return; // bir şekilde zaten kullanıcı adı varsa (ör. eski veri) atla
 
   document.getElementById('mainMenu').classList.remove('show');
+
+  // ÖNEMLİ: kullanıcı adı ekranından BİLE önce dil seçtiriyoruz. Aksi
+  // hâlde LANG varsayılan olarak 'en' kalıyordu ve kullanıcı adı ekranı,
+  // tanıtım, Bölüm 0 ve Bölüm 1 rehberi — hepsi kullanıcı ana menüye
+  // ulaşıp dili DEĞİŞTİRENE kadar İngilizce kalıyordu.
+  if(!localStorage_get('pz_lang')){
+    await askLanguagePick();
+  }
+
   const res = await waitForOnlineThenAskUsername();
   if(res && !res.cancelled){
     logAnalyticsEvent('first_open_username_created', {});
