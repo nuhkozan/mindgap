@@ -231,8 +231,11 @@ button:disabled{opacity:.35;cursor:default}
 .modal input:focus{border-color:#00e8ff;box-shadow:0 0 10px rgba(0,220,255,.3)}
 .modal button.primary{font-size:clamp(1.05rem,4.8vw,1.3rem);font-weight:800;padding:14px 20px;
   letter-spacing:.02em}
-.langPickBtn{display:block;width:100%;margin:6px 0;font-size:clamp(1rem,4.4vw,1.2rem);
-  font-weight:700;padding:14px 18px;text-align:center}
+.langPickBtn{display:block;width:100%;margin:8px 0;font-size:clamp(1rem,4.4vw,1.2rem);
+  font-weight:800;padding:16px 18px;text-align:center;
+  background:linear-gradient(135deg,#00c8ff,#0055b0);color:#fff;
+  border:1px solid #00e8ff;box-shadow:0 0 10px rgba(0,200,255,.4)}
+.langPickBtn:hover{background:linear-gradient(135deg,#1ad4ff,#0066cc)}
 
 /* BÖLÜM HARİTASI */
 .mapCard{width:min(92vw,420px);max-height:82vh}
@@ -471,7 +474,6 @@ function logAnalyticsEvent(name, params){
 
 <div class="modal" id="langPickModal">
   <div class="card">
-    <h2>🌐 Language / Dil / Idioma / اللغة / Язык</h2>
     <button class="langPickBtn" data-lang="tr">🇹🇷 Türkçe</button>
     <button class="langPickBtn" data-lang="en">🇬🇧 English</button>
     <button class="langPickBtn" data-lang="es">🇪🇸 Español</button>
@@ -2113,7 +2115,13 @@ function loadLevel(){
   // sürükleyip yerleştirmesini adım adım işaretleyerek istiyoruz. Sadece
   // GERÇEKTEN yeni oyuncularda tetiklenir (EARNED_LEVEL===0) ve sadece bir
   // kez — daha önce görmüş/tamamlamış oyuncular tekrar karşılaşmaz.
+  // ÖNEMLİ: !isNewPlayerDemoNeeded() şartı da eklendi — aksi hâlde bu
+  // fonksiyonun komut dosyasının en altında koşulsuz çalışan İLK
+  // çağrısında (demo henüz playIntroDemo() ile başlamadan, demoActive
+  // hâlâ false iken) rehber yanlışlıkla tetiklenip, az sonra başlayan
+  // demo ekranıyla üst üste biniyordu.
   if(LEVEL===0 && EARNED_LEVEL===0 && !localStorage_get('pz_level1_guided_done')
+     && !isNewPlayerDemoNeeded()
      && !(typeof demoActive!=='undefined' && demoActive)
      && !(typeof tutorialInteractive!=='undefined' && tutorialInteractive)){
     startLevel1Guide();
@@ -2821,7 +2829,7 @@ async function askUsername(forced){
   const okBtn=document.getElementById('nameOkBtn');
   const backBtn=document.getElementById('nameBackBtn');
   modal.classList.add('show');
-  backBtn.style.display=forced?'none':''; // zorunlu ilk açılış ekranında geri/atla seçeneği yok
+  backBtn.style.display=''; // artık zorunlu modda da görünür (dil menüsüne dönüş için kullanılıyor)
   err.textContent='';
   err.classList.remove('offlineErr');
   okBtn.textContent=T('startBtn');
@@ -2872,7 +2880,7 @@ async function askUsername(forced){
       resolve({cancelled:true});
     }
     okBtn.onclick=submit;
-    backBtn.onclick=forced?null:goBack;
+    backBtn.onclick=goBack;
     input.onkeydown=e=>{if(e.key==='Enter')submit();};
   });
 }
@@ -3482,15 +3490,26 @@ async function waitForOnlineThenAskUsername(){
     await askLanguagePick();
   }
 
-  const res = await waitForOnlineThenAskUsername();
-  if(res && !res.cancelled){
-    logAnalyticsEvent('first_open_username_created', {});
+  // Kullanıcı adı ekranındaki "Geri" tuşuna basılırsa (res.cancelled),
+  // dil menüsüne DÖNÜLÜR (kullanıcı dilini değiştirmek istemiş olabilir),
+  // sonra kullanıcı adı TEKRAR sorulur. Kullanıcı adı olmadan devam
+  // edilemez — bu yüzden döngü sadece başarıyla tamamlanınca kırılır.
+  let res;
+  while(true){
+    res = await waitForOnlineThenAskUsername();
+    if(res && res.cancelled){
+      await askLanguagePick();
+      continue;
+    }
+    break;
   }
+
+  logAnalyticsEvent('first_open_username_created', {});
   // ÖNEMLİ: mmNewUser'daki normal akışla AYNI mantık — kullanıcı adı
   // oluşturulunca demo/Bölüm 0 tanıtımı (varsa) tetiklenmeli. Önceki sürümde
   // bu kontrol unutulmuştu, doğrudan ana menüye atlıyordu — tanıtım ve
   // Bölüm 0 hiç görünmüyordu.
-  if(res && !res.cancelled && isNewPlayerDemoNeeded()){
+  if(isNewPlayerDemoNeeded()){
     playIntroDemo();
   } else {
     document.getElementById('mainMenu').classList.add('show');
