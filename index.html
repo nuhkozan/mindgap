@@ -1928,6 +1928,23 @@ document.getElementById('solveBtn').onclick=()=>{
 // Native (Android) taraftan reklam bittiğinde çağrılan global callback'ler.
 // MainActivity.java bunları webView.evaluateJavascript(...) ile tetikler.
 let lastAdDebugMsg='';
+
+// Native taraftaki OnPaidEventListener'dan gelir — reklam GERÇEKTEN para
+// kazandığı an tetiklenir (gösterim başına gerçek gelir). Google Ads'te
+// "Dönüşüm değerini en üst düzeye çıkar" teklif stratejisinin ihtiyaç
+// duyduğu 'ad_revenue' olayını burada Firebase Analytics'e (zaten çalışan
+// web katmanı üzerinden) kaydediyoruz — native Firebase SDK/config dosyası
+// eklemeye gerek kalmadan.
+window.onAdPaidEvent=function(value, currencyCode, adUnitId){
+  logAnalyticsEvent('ad_revenue', {
+    value: value,
+    currency: currencyCode || 'USD',
+    ad_platform: 'AdMob',
+    ad_source: 'AdMob Network',
+    ad_unit_name: adUnitId || ''
+  });
+};
+
 window.onRewardedAdShowing=function(){
   // Reklam artık GERÇEKTEN ekranda — 2 saniyede bir tekrar deneyen döngüyü
   // ve 10 saniyelik "vazgeç ve otomatik çöz" zaman aşımını DURDUR. Aksi hâlde:
