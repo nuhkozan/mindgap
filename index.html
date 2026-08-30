@@ -525,7 +525,18 @@ function logAnalyticsEvent(name, params){
     <div id="rankShiftTrack"></div>
     <div id="rankShiftDelta"></div>
   </div>
+  <button id="shareResultBtn">📤 Paylaş</button>
   <button id="nextLvlBtn" class="primary">Sonraki Bölüm →</button>
+</div>
+
+<div class="modal" id="rateModal">
+  <div class="card">
+    <h2 id="rateModalTitleTxt">⭐ Mind Gap'i beğendin mi?</h2>
+    <p id="rateModalMsgTxt" style="color:#b0ddf0;font-size:.9rem">Play Store'da bir puan bırakarak destek olabilirsin!</p>
+    <button id="rateNowBtn" class="primary">⭐ Değerlendir</button>
+    <button id="rateLaterBtn">Daha Sonra</button>
+    <button id="rateNeverBtn" style="opacity:.6;font-size:.78rem">Bir Daha Sorma</button>
+  </div>
 </div>
 
 <script>
@@ -1417,6 +1428,7 @@ async function checkWin(){
     rewardTxt.textContent='⭐ +'+titleBonusScore+'   💡 +1 '+T('hint');
     badge.classList.add('titleChanged');
     SFX.titleUp(); HAPTICS.titleUp();
+    pendingRatePrompt=true; // ünvan atlama — puanlama isteği için doğal bir an
   } else {
     labelTxt.textContent=T('currentTitleLabel');
     document.getElementById('titleUpName').textContent=newTitle;
@@ -1457,13 +1469,95 @@ async function checkWin(){
   })();
 }
 
+let pendingRatePrompt=false;
+
 document.getElementById('nextLvlBtn').onclick=()=>{
   winOverlay.classList.remove('show');
   document.getElementById('titleUpBadge').classList.remove('show','titleChanged');
   document.getElementById('rankShiftPanel').classList.remove('show');
+  if(pendingRatePrompt && shouldShowRateModal()){
+    pendingRatePrompt=false;
+    showRateModal();
+    return;
+  }
+  advanceToNextLevel();
+};
+
+function advanceToNextLevel(){
   if(LEVEL<TOTAL_LEVELS-1){LEVEL++;loadLevel();}
   else{statusEl.textContent=T('allDone');}
+}
+
+// ═══════════════════════════════════════════════════════
+// UYGULAMA İÇİ PUANLAMA İSTEĞİ — native In-App Review API DEĞİL (o, yeni bir
+// native build + Play Store yayını gerektirirdi). Bunun yerine hafif bir
+// JS modalı: Play Store sayfasına yönlendiriyor. Sadece ünvan atlama gibi
+// olumlu bir anda, en fazla haftada bir, ve kalıcı "bir daha sorma" seçeneğiyle.
+// ═══════════════════════════════════════════════════════
+const PLAY_STORE_URL='https://play.google.com/store/apps/details?id=com.mindgap.app';
+
+function shouldShowRateModal(){
+  if(localStorage_get('pz_rate_never')) return false;
+  if(localStorage_get('pz_rate_done')) return false;
+  const last=parseInt(localStorage_get('pz_rate_dismissed_at')||'0');
+  if(last && (Date.now()-last) < 7*24*60*60*1000) return false; // 7 gün soğuma süresi
+  return true;
+}
+
+function showRateModal(){
+  document.getElementById('rateModalTitleTxt').textContent=T('rateModalTitle');
+  document.getElementById('rateModalMsgTxt').textContent=T('rateModalMsg');
+  document.getElementById('rateNowBtn').textContent=T('rateNowBtn');
+  document.getElementById('rateLaterBtn').textContent=T('rateLaterBtn');
+  document.getElementById('rateNeverBtn').textContent=T('rateNeverBtn');
+  document.getElementById('rateModal').classList.add('show');
+  logAnalyticsEvent('rate_prompt_shown', {});
+}
+function closeRateModal(){
+  document.getElementById('rateModal').classList.remove('show');
+  advanceToNextLevel();
+}
+document.getElementById('rateNowBtn').onclick=()=>{
+  localStorage_set('pz_rate_done','1');
+  logAnalyticsEvent('rate_prompt_clicked', {action:'rate'});
+  window.open(PLAY_STORE_URL,'_blank');
+  closeRateModal();
 };
+document.getElementById('rateLaterBtn').onclick=()=>{
+  localStorage_set('pz_rate_dismissed_at',String(Date.now()));
+  logAnalyticsEvent('rate_prompt_clicked', {action:'later'});
+  closeRateModal();
+};
+document.getElementById('rateNeverBtn').onclick=()=>{
+  localStorage_set('pz_rate_never','1');
+  logAnalyticsEvent('rate_prompt_clicked', {action:'never'});
+  closeRateModal();
+};
+
+// ═══════════════════════════════════════════════════════
+// SONUCUNU PAYLAŞ — Web Share API varsa native paylaşım penceresi;
+// yoksa (bazı WebView sürümleri) panoya kopyalayıp bilgilendirme gösterir.
+// ═══════════════════════════════════════════════════════
+async function shareResult(){
+  const lvl=Math.min(EARNED_LEVEL,TOTAL_LEVELS-1);
+  const text=T('shareText')
+    .replace('{title}',titleFor(lvl))
+    .replace('{iq}',String(iqFor(lvl)))
+    .replace('{level}',String(lvl));
+  try{
+    if(navigator.share){
+      await navigator.share({text:text, url:PLAY_STORE_URL});
+      logAnalyticsEvent('share_result', {method:'native'});
+    } else if(navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(text+' '+PLAY_STORE_URL);
+      showToast(T('shareCopied'));
+      logAnalyticsEvent('share_result', {method:'clipboard'});
+    }
+  }catch(e){
+    // Kullanıcı paylaşım penceresini iptal etti — sessizce geç, hataya düşürme.
+  }
+}
+document.getElementById('shareResultBtn').onclick=shareResult;
 
 // ═══════════════════════════════════════════════════════
 // ÇÖZÜCÜ (hedef kare bloke)
@@ -3132,6 +3226,8 @@ const I18N={
     score:'Score', bonusHint:'Bonus hint earned!', newUser:'New Username', newGame:'New Game', continueGame:'Continue', welcomeBack:'Welcome back', alreadySolved:'Already solved — no points', adSolvedNoReward:'Solved via ad — no points or IQ', demoTitle:'Tutorial', demoSub:'Watch how the game works', skipTutorial:'Skip Tutorial', demoWelcome:'👋 Welcome! Let\'s see how it works...', demoDrag:'👆 Hold & drag the piece onto the board', demoComplete:'✅ That\'s it! Now try it yourself',
     tutInteractiveSub:'Now it\'s your turn — try it yourself', tutRotateMsg:'👆 Tap the piece to rotate it', tutDragMsg:'✋ Now drag it onto the board', tutDoneMsg:'🎉 Perfect! You\'ve got it',
     level1GuideHint:'👆 Tap "Hint" to place your first piece', level1GuideRotate:'👆 Tap the piece to rotate it into place', level1GuideDrag:'✋ Now drag this piece onto the marked spot',
+    shareBtnLabel:'📤 Share', shareText:'I just reached {title} (IQ {iq}, Level {level}) in Mind Gap! 🧠 Can you beat me?', shareCopied:'Copied! You can paste it anywhere.',
+    rateModalTitle:'⭐ Enjoying Mind Gap?', rateModalMsg:'A quick rating on Play Store really helps us out!', rateNowBtn:'⭐ Rate Now', rateLaterBtn:'Later', rateNeverBtn:"Don't Ask Again",
   },
   tr:{
     play:'Oyna', champ:'Şampiyonlar Ligi', rules:'Oyun Kuralları', levelMap:'Bölüm Haritası', streakDays:'gün seri', privacyOptions:'Gizlilik Tercihleri',
@@ -3152,6 +3248,8 @@ const I18N={
     score:'Puan', bonusHint:'Bonus ipucu kazandın!', newUser:'Yeni Kullanıcı Adı', newGame:'Yeni Oyun', continueGame:'Devam Et', welcomeBack:'Tekrar hoş geldin', alreadySolved:'Zaten çözülmüş — puan yok', adSolvedNoReward:'Reklamla çözüldü — puan/IQ yok', demoTitle:'Tanıtım', demoSub:'Oyunun nasıl oynandığını izle', skipTutorial:'Tanıtımı Geç', demoWelcome:'👋 Hoş geldin! Nasıl oynandığına bakalım...', demoDrag:'👆 Parçayı basılı tutup tahtaya sürükle', demoComplete:'✅ İşte bu kadar! Şimdi sıra sende',
     tutInteractiveSub:'Şimdi sıra sende — kendin dene', tutRotateMsg:'👆 Parçaya dokun ve döndür', tutDragMsg:'✋ Şimdi sürükleyip tahtaya yerleştir', tutDoneMsg:'🎉 Harika! Öğrendin',
     level1GuideHint:'👆 İlk parçayı yerleştirmek için "İpucu"na dokun', level1GuideRotate:'👆 Parçaya dokun, doğru yöne döndür', level1GuideDrag:'✋ Şimdi bu parçayı işaretli yere sürükle',
+    shareBtnLabel:'📤 Paylaş', shareText:'Mind Gap\'te az önce {title} ünvanına ulaştım! (IQ {iq}, Bölüm {level}) 🧠 Beni geçebilir misin?', shareCopied:'Kopyalandı! İstediğin yere yapıştırabilirsin.',
+    rateModalTitle:'⭐ Mind Gap\'i beğendin mi?', rateModalMsg:"Play Store'da bir puan bırakarak destek olabilirsin!", rateNowBtn:'⭐ Değerlendir', rateLaterBtn:'Daha Sonra', rateNeverBtn:'Bir Daha Sorma',
   },
   es:{
     play:'Jugar', champ:'Liga de Campeones', rules:'Cómo Jugar', levelMap:'Mapa de Niveles', streakDays:'días seguidos', privacyOptions:'Opciones de Privacidad',
@@ -3172,6 +3270,8 @@ const I18N={
     score:'Puntos', bonusHint:'¡Pista extra ganada!', newUser:'Nuevo Usuario', newGame:'Nuevo Juego', continueGame:'Continuar', welcomeBack:'Bienvenido de nuevo', alreadySolved:'Ya resuelto — sin puntos', adSolvedNoReward:'Resuelto con anuncio — sin puntos ni IQ', demoTitle:'Tutorial', demoSub:'Mira cómo funciona el juego', skipTutorial:'Omitir Tutorial', demoWelcome:'👋 ¡Bienvenido! Veamos cómo funciona...', demoDrag:'👆 Mantén y arrastra la pieza al tablero', demoComplete:'✅ ¡Eso es todo! Ahora inténtalo tú',
     tutInteractiveSub:'Ahora te toca a ti — inténtalo', tutRotateMsg:'👆 Toca la pieza para girarla', tutDragMsg:'✋ Ahora arrástrala al tablero', tutDoneMsg:'🎉 ¡Perfecto! Ya lo tienes',
     level1GuideHint:'👆 Toca "Pista" para colocar tu primera pieza', level1GuideRotate:'👆 Toca la pieza para girarla a su posición', level1GuideDrag:'✋ Ahora arrastra esta pieza al lugar marcado',
+    shareBtnLabel:'📤 Compartir', shareText:'¡Acabo de alcanzar {title} (IQ {iq}, Nivel {level}) en Mind Gap! 🧠 ¿Puedes superarme?', shareCopied:'¡Copiado! Puedes pegarlo donde quieras.',
+    rateModalTitle:'⭐ ¿Te gusta Mind Gap?', rateModalMsg:'¡Una valoración rápida en Play Store nos ayuda mucho!', rateNowBtn:'⭐ Valorar Ahora', rateLaterBtn:'Más Tarde', rateNeverBtn:'No Preguntar Más',
   },
   ar:{
     play:'العب', champ:'دوري الأبطال', rules:'كيفية اللعب', levelMap:'خريطة المراحل', streakDays:'أيام متتالية', privacyOptions:'خيارات الخصوصية',
@@ -3192,6 +3292,8 @@ const I18N={
     score:'النقاط', bonusHint:'حصلت على تلميح إضافي!', newUser:'اسم مستخدم جديد', newGame:'لعبة جديدة', continueGame:'متابعة', welcomeBack:'مرحباً بعودتك', alreadySolved:'تم حلها مسبقاً — بلا نقاط', adSolvedNoReward:'حُلّت عبر الإعلان — بلا نقاط أو ذكاء', demoTitle:'تعليمي', demoSub:'شاهد كيف تعمل اللعبة', skipTutorial:'تخطي الشرح', demoWelcome:'👋 مرحباً! لنرَ كيف تعمل...', demoDrag:'👆 اضغط مطولاً واسحب القطعة إلى اللوحة', demoComplete:'✅ هذا كل شيء! الآن جرّب بنفسك',
     tutInteractiveSub:'الآن دورك — جرّب بنفسك', tutRotateMsg:'👆 اضغط على القطعة لتدويرها', tutDragMsg:'✋ الآن اسحبها إلى اللوحة', tutDoneMsg:'🎉 ممتاز! لقد أتقنتها',
     level1GuideHint:'👆 اضغط على "تلميح" لوضع أول قطعة', level1GuideRotate:'👆 اضغط على القطعة لتدويرها إلى مكانها الصحيح', level1GuideDrag:'✋ الآن اسحب هذه القطعة إلى المكان المُحدد',
+    shareBtnLabel:'📤 مشاركة', shareText:'وصلت للتو إلى لقب {title} (الذكاء {iq}، المرحلة {level}) في Mind Gap! 🧠 هل يمكنك التفوق عليّ؟', shareCopied:'تم النسخ! يمكنك لصقه في أي مكان.',
+    rateModalTitle:'⭐ هل يعجبك Mind Gap؟', rateModalMsg:'تقييم سريع على Play Store يساعدنا كثيراً!', rateNowBtn:'⭐ قيّم الآن', rateLaterBtn:'لاحقاً', rateNeverBtn:'لا تسأل مرة أخرى',
   },
   ru:{
     play:'Играть', champ:'Лига Чемпионов', rules:'Как играть', levelMap:'Карта уровней', streakDays:'дней подряд', privacyOptions:'Настройки конфиденциальности',
@@ -3212,6 +3314,8 @@ const I18N={
     score:'Очки', bonusHint:'Получена бонусная подсказка!', newUser:'Новый ник', newGame:'Новая игра', continueGame:'Продолжить', welcomeBack:'С возвращением', alreadySolved:'Уже решено — без очков', adSolvedNoReward:'Решено через рекламу — без очков и IQ', demoTitle:'Обучение', demoSub:'Посмотри, как играть', skipTutorial:'Пропустить', demoWelcome:'👋 Добро пожаловать! Посмотрим как это работает...', demoDrag:'👆 Удерживай и тяни фигуру на доску', demoComplete:'✅ Вот и всё! Теперь попробуй сам',
     tutInteractiveSub:'Теперь твоя очередь — попробуй сам', tutRotateMsg:'👆 Нажми на фигуру, чтобы повернуть', tutDragMsg:'✋ Теперь перетащи её на доску', tutDoneMsg:'🎉 Отлично! У тебя получилось',
     level1GuideHint:'👆 Нажми «Подсказка», чтобы разместить первую фигуру', level1GuideRotate:'👆 Нажми на фигуру, чтобы повернуть её в нужное положение', level1GuideDrag:'✋ Теперь перетащи эту фигуру на отмеченное место',
+    shareBtnLabel:'📤 Поделиться', shareText:'Я только что достиг звания {title} (IQ {iq}, Уровень {level}) в Mind Gap! 🧠 Сможешь меня превзойти?', shareCopied:'Скопировано! Можешь вставить куда угодно.',
+    rateModalTitle:'⭐ Нравится Mind Gap?', rateModalMsg:'Быстрая оценка в Play Store очень нам поможет!', rateNowBtn:'⭐ Оценить', rateLaterBtn:'Позже', rateNeverBtn:'Больше не спрашивать',
   }
 };
 let LANG=localStorage_get('pz_lang')||'en';
@@ -3224,6 +3328,7 @@ function applyLang(){
   if(typeof CURRENT_TUT_MSG_KEY!=='undefined' && CURRENT_TUT_MSG_KEY){
     setTutMsg(CURRENT_TUT_MSG_KEY);
   }
+  document.getElementById('shareResultBtn') && (document.getElementById('shareResultBtn').textContent=T('shareBtnLabel'));
   document.getElementById('mmNewUserTxt') && (document.getElementById('mmNewUserTxt').textContent=T('newUser'));
   document.getElementById('mmContinueTxt') && (document.getElementById('mmContinueTxt').textContent=T('continueGame'));
   document.getElementById('mmNewGameTxt') && (document.getElementById('mmNewGameTxt').textContent=T('newGame'));
