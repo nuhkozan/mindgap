@@ -28,8 +28,8 @@ LAUNCH_URL="https://nuhkozan.github.io/mindgap/"
 PATH_PREFIX="/mindgap/"
 THEME_COLOR="#060A10"
 BG_COLOR="#060A10"
-VERSION_NAME="1.2.0"
-VERSION_CODE="5"
+VERSION_NAME="1.2.1"
+VERSION_CODE="6"
 ICON_URL="https://nuhkozan.github.io/mindgap/icons/icon-512.png"
 
 # ── AdMob ──
@@ -277,6 +277,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -668,6 +669,32 @@ public class MainActivity extends Activity {
             return consentInformation != null &&
                     consentInformation.getPrivacyOptionsRequirementStatus()
                             == ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED;
+        }
+
+        /**
+         * Play Store gibi harici bir bağlantıyı GÜVENLİ şekilde açar — Android'in
+         * kendi Intent sistemini (ACTION_VIEW) doğrudan kullanır. WebView'a "şu
+         * adrese git" demek YERİNE, işletim sistemine "bu URL'yi aç" diyoruz.
+         * ÖNEMLİ: Play Store'un web sayfası, WebView'dan geldiğini anlayınca
+         * kendi sunucusunda "intent://..." şemasına yönlendirir — çıplak bir
+         * WebView bileşeni bu şemayı TANIMAZ ve donmuş bir hata sayfasında
+         * takılı kalır (kullanıcı uygulamayı kapatmak zorunda kalır). Bu metot
+         * WebView'ı hiç devreye sokmadığı için o soruna hiç girmiyor.
+         */
+        @JavascriptInterface
+        public void openExternalUrl(final String url) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                    } catch (Exception e) {
+                        // Sessizce vazgeç — bu opsiyonel bir kolaylık, oyunu asla bozmamalı.
+                    }
+                }
+            });
         }
     }
 
