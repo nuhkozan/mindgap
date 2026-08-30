@@ -1496,6 +1496,32 @@ function advanceToNextLevel(){
 // ═══════════════════════════════════════════════════════
 const PLAY_STORE_URL='https://play.google.com/store/apps/details?id=com.mindgap.app';
 
+// Play Store linkini KATMANLI GÜVENLİKLE açar:
+// 1) Native köprüde yeni openExternalUrl() varsa (güncel APK) — Android'in
+//    kendi Intent sistemiyle DOĞRUDAN ve GÜVENLİ şekilde açar.
+// 2) Native köprü var ama HENÜZ ESKİ sürümse (openExternalUrl yok) —
+//    WebView içinde window.open() KULLANMAZ (Play Store'un WebView'ı fark
+//    edip "intent://" şemasına yönlendirmesi, çıplak WebView'ın bunu
+//    tanımayıp donmuş bir hata sayfasında takılı kalmasına yol açıyordu —
+//    kullanıcı uygulamayı kapatmak zorunda kalıyordu). Onun yerine linki
+//    panoya kopyalayıp kullanıcıyı bilgilendirir.
+// 3) AndroidBridge hiç yoksa (gerçek tarayıcı/PWA bağlamı) — window.open
+//    güvenlidir, orada kullanılır.
+function openPlayStore(url){
+  try{
+    if(window.AndroidBridge && typeof window.AndroidBridge.openExternalUrl==='function'){
+      window.AndroidBridge.openExternalUrl(url);
+      return;
+    }
+  }catch(e){}
+  if(window.AndroidBridge){
+    try{ navigator.clipboard && navigator.clipboard.writeText(url); }catch(e){}
+    showToast(T('rateManualFallback'));
+    return;
+  }
+  try{ window.open(url,'_blank'); }catch(e){}
+}
+
 function shouldShowRateModal(){
   if(localStorage_get('pz_rate_never')) return false;
   if(localStorage_get('pz_rate_done')) return false;
@@ -1520,7 +1546,7 @@ function closeRateModal(){
 document.getElementById('rateNowBtn').onclick=()=>{
   localStorage_set('pz_rate_done','1');
   logAnalyticsEvent('rate_prompt_clicked', {action:'rate'});
-  window.open(PLAY_STORE_URL,'_blank');
+  openPlayStore(PLAY_STORE_URL);
   closeRateModal();
 };
 document.getElementById('rateLaterBtn').onclick=()=>{
@@ -3227,7 +3253,7 @@ const I18N={
     tutInteractiveSub:'Now it\'s your turn — try it yourself', tutRotateMsg:'👆 Tap the piece to rotate it', tutDragMsg:'✋ Now drag it onto the board', tutDoneMsg:'🎉 Perfect! You\'ve got it',
     level1GuideHint:'👆 Tap "Hint" to place your first piece', level1GuideRotate:'👆 Tap the piece to rotate it into place', level1GuideDrag:'✋ Now drag this piece onto the marked spot',
     shareBtnLabel:'📤 Share', shareText:'I just reached {title} (IQ {iq}, Level {level}) in Mind Gap! 🧠 Can you beat me?', shareCopied:'Copied! You can paste it anywhere.',
-    rateModalTitle:'⭐ Enjoying Mind Gap?', rateModalMsg:'A quick rating on Play Store really helps us out!', rateNowBtn:'⭐ Rate Now', rateLaterBtn:'Later', rateNeverBtn:"Don't Ask Again",
+    rateModalTitle:'⭐ Enjoying Mind Gap?', rateModalMsg:'A quick rating on Play Store really helps us out!', rateNowBtn:'⭐ Rate Now', rateLaterBtn:'Later', rateNeverBtn:"Don't Ask Again", rateManualFallback:'Store link copied! Paste it in your browser to rate us.',
   },
   tr:{
     play:'Oyna', champ:'Şampiyonlar Ligi', rules:'Oyun Kuralları', levelMap:'Bölüm Haritası', streakDays:'gün seri', privacyOptions:'Gizlilik Tercihleri',
@@ -3249,7 +3275,7 @@ const I18N={
     tutInteractiveSub:'Şimdi sıra sende — kendin dene', tutRotateMsg:'👆 Parçaya dokun ve döndür', tutDragMsg:'✋ Şimdi sürükleyip tahtaya yerleştir', tutDoneMsg:'🎉 Harika! Öğrendin',
     level1GuideHint:'👆 İlk parçayı yerleştirmek için "İpucu"na dokun', level1GuideRotate:'👆 Parçaya dokun, doğru yöne döndür', level1GuideDrag:'✋ Şimdi bu parçayı işaretli yere sürükle',
     shareBtnLabel:'📤 Paylaş', shareText:'Mind Gap\'te az önce {title} ünvanına ulaştım! (IQ {iq}, Bölüm {level}) 🧠 Beni geçebilir misin?', shareCopied:'Kopyalandı! İstediğin yere yapıştırabilirsin.',
-    rateModalTitle:'⭐ Mind Gap\'i beğendin mi?', rateModalMsg:"Play Store'da bir puan bırakarak destek olabilirsin!", rateNowBtn:'⭐ Değerlendir', rateLaterBtn:'Daha Sonra', rateNeverBtn:'Bir Daha Sorma',
+    rateModalTitle:'⭐ Mind Gap\'i beğendin mi?', rateModalMsg:"Play Store'da bir puan bırakarak destek olabilirsin!", rateNowBtn:'⭐ Değerlendir', rateLaterBtn:'Daha Sonra', rateNeverBtn:'Bir Daha Sorma', rateManualFallback:'Mağaza linki kopyalandı! Tarayıcına yapıştırıp değerlendirebilirsin.',
   },
   es:{
     play:'Jugar', champ:'Liga de Campeones', rules:'Cómo Jugar', levelMap:'Mapa de Niveles', streakDays:'días seguidos', privacyOptions:'Opciones de Privacidad',
@@ -3271,7 +3297,7 @@ const I18N={
     tutInteractiveSub:'Ahora te toca a ti — inténtalo', tutRotateMsg:'👆 Toca la pieza para girarla', tutDragMsg:'✋ Ahora arrástrala al tablero', tutDoneMsg:'🎉 ¡Perfecto! Ya lo tienes',
     level1GuideHint:'👆 Toca "Pista" para colocar tu primera pieza', level1GuideRotate:'👆 Toca la pieza para girarla a su posición', level1GuideDrag:'✋ Ahora arrastra esta pieza al lugar marcado',
     shareBtnLabel:'📤 Compartir', shareText:'¡Acabo de alcanzar {title} (IQ {iq}, Nivel {level}) en Mind Gap! 🧠 ¿Puedes superarme?', shareCopied:'¡Copiado! Puedes pegarlo donde quieras.',
-    rateModalTitle:'⭐ ¿Te gusta Mind Gap?', rateModalMsg:'¡Una valoración rápida en Play Store nos ayuda mucho!', rateNowBtn:'⭐ Valorar Ahora', rateLaterBtn:'Más Tarde', rateNeverBtn:'No Preguntar Más',
+    rateModalTitle:'⭐ ¿Te gusta Mind Gap?', rateModalMsg:'¡Una valoración rápida en Play Store nos ayuda mucho!', rateNowBtn:'⭐ Valorar Ahora', rateLaterBtn:'Más Tarde', rateNeverBtn:'No Preguntar Más', rateManualFallback:'¡Enlace copiado! Pégalo en tu navegador para valorarnos.',
   },
   ar:{
     play:'العب', champ:'دوري الأبطال', rules:'كيفية اللعب', levelMap:'خريطة المراحل', streakDays:'أيام متتالية', privacyOptions:'خيارات الخصوصية',
@@ -3293,7 +3319,7 @@ const I18N={
     tutInteractiveSub:'الآن دورك — جرّب بنفسك', tutRotateMsg:'👆 اضغط على القطعة لتدويرها', tutDragMsg:'✋ الآن اسحبها إلى اللوحة', tutDoneMsg:'🎉 ممتاز! لقد أتقنتها',
     level1GuideHint:'👆 اضغط على "تلميح" لوضع أول قطعة', level1GuideRotate:'👆 اضغط على القطعة لتدويرها إلى مكانها الصحيح', level1GuideDrag:'✋ الآن اسحب هذه القطعة إلى المكان المُحدد',
     shareBtnLabel:'📤 مشاركة', shareText:'وصلت للتو إلى لقب {title} (الذكاء {iq}، المرحلة {level}) في Mind Gap! 🧠 هل يمكنك التفوق عليّ؟', shareCopied:'تم النسخ! يمكنك لصقه في أي مكان.',
-    rateModalTitle:'⭐ هل يعجبك Mind Gap؟', rateModalMsg:'تقييم سريع على Play Store يساعدنا كثيراً!', rateNowBtn:'⭐ قيّم الآن', rateLaterBtn:'لاحقاً', rateNeverBtn:'لا تسأل مرة أخرى',
+    rateModalTitle:'⭐ هل يعجبك Mind Gap؟', rateModalMsg:'تقييم سريع على Play Store يساعدنا كثيراً!', rateNowBtn:'⭐ قيّم الآن', rateLaterBtn:'لاحقاً', rateNeverBtn:'لا تسأل مرة أخرى', rateManualFallback:'تم نسخ رابط المتجر! الصقه في متصفحك لتقييمنا.',
   },
   ru:{
     play:'Играть', champ:'Лига Чемпионов', rules:'Как играть', levelMap:'Карта уровней', streakDays:'дней подряд', privacyOptions:'Настройки конфиденциальности',
@@ -3315,7 +3341,7 @@ const I18N={
     tutInteractiveSub:'Теперь твоя очередь — попробуй сам', tutRotateMsg:'👆 Нажми на фигуру, чтобы повернуть', tutDragMsg:'✋ Теперь перетащи её на доску', tutDoneMsg:'🎉 Отлично! У тебя получилось',
     level1GuideHint:'👆 Нажми «Подсказка», чтобы разместить первую фигуру', level1GuideRotate:'👆 Нажми на фигуру, чтобы повернуть её в нужное положение', level1GuideDrag:'✋ Теперь перетащи эту фигуру на отмеченное место',
     shareBtnLabel:'📤 Поделиться', shareText:'Я только что достиг звания {title} (IQ {iq}, Уровень {level}) в Mind Gap! 🧠 Сможешь меня превзойти?', shareCopied:'Скопировано! Можешь вставить куда угодно.',
-    rateModalTitle:'⭐ Нравится Mind Gap?', rateModalMsg:'Быстрая оценка в Play Store очень нам поможет!', rateNowBtn:'⭐ Оценить', rateLaterBtn:'Позже', rateNeverBtn:'Больше не спрашивать',
+    rateModalTitle:'⭐ Нравится Mind Gap?', rateModalMsg:'Быстрая оценка в Play Store очень нам поможет!', rateNowBtn:'⭐ Оценить', rateLaterBtn:'Позже', rateNeverBtn:'Больше не спрашивать', rateManualFallback:'Ссылка на магазин скопирована! Вставь её в браузер, чтобы оценить нас.',
   }
 };
 let LANG=localStorage_get('pz_lang')||'en';
